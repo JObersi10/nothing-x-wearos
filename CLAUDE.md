@@ -123,6 +123,24 @@ and `org.jetbrains.kotlin.plugin.compose` (Compose compiler, a separate
 plugin from kotlin-android) both stay as-is — this only affects
 kotlin-android specifically.
 
+#### compileSdk stepped back to 36 — 37 isn't resolvable in CI yet
+
+The whole point of this toolchain bump was compileSdk 37 for Wear Widgets.
+After fixing the built-in-Kotlin collision above, the very next CI run
+failed differently — cleanly, from the actual sdkmanager output, not
+guessed: `Warning: Failed to find package 'platforms;android-37'`.
+Google's SDK repository feed, as seen by this CI runner, doesn't serve that
+platform package yet, regardless of Android 17's real-world release status.
+AGP 9.1.1/Kotlin 2.2.10 don't themselves require compileSdk 37 — only the
+Wear Widget libraries do — so `compileSdk`/`targetSdk` in `bluetooth`,
+`wear`, and `phone` were stepped back to **36** (and the CI `sdkmanager`
+step to `platforms;android-36`) to get the rest of the toolchain bump
+green on its own. **Wear Widget implementation (Phase 2) is blocked on
+this** — don't bump compileSdk back to 37 speculatively; confirm
+`platforms;android-37` actually resolves via a CI run first (or find the
+right channel/package id if it turns out to need one, the way old Android
+preview SDKs used codename-based package ids before their numeric release).
+
 ### Why `protocol`'s Kotlin JVM toolchain is 21, not 17
 
 The Android modules target JDK 17 (AGP 8.5 requirement zone). `protocol` was

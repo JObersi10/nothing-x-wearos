@@ -9,7 +9,13 @@ plugins {
 
 android {
     namespace = "com.nothingx.wear"
-    compileSdk = 37 // Wear Widgets require compileSdk 37 (see settings.gradle.kts)
+    // Wear Widgets need compileSdk 37, but CI's sdkmanager couldn't
+    // resolve `platforms;android-37` from Google's repository feed
+    // (confirmed via the actual CI failure, not guessed) — stepped back to
+    // 36 to get the toolchain migration itself green; see settings.gradle.kts
+    // and CLAUDE.md for the full story. Bump back to 37 (and re-add Wear
+    // Widget-specific work) once 37 is confirmed actually fetchable here.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.nothingx.wear"
@@ -19,7 +25,7 @@ android {
         // full-screen Tile (NothingXTileService) stays as the fallback for
         // those, per both Google's own migration guidance and the user's
         // explicit ask to keep it for older watches.
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }

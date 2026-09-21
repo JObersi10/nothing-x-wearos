@@ -34,6 +34,21 @@ pluginManagement {
     // jvmTarget defaults to android.compileOptions.targetCompatibility.
     // org.jetbrains.kotlin.jvm stays — :protocol is pure JVM, never touches
     // AGP, and built-in Kotlin doesn't apply to it at all.
+    //
+    // compileSdk/targetSdk in the Android modules are 36, NOT 37, even
+    // though Wear Widgets need 37 (the whole reason for this toolchain
+    // bump). Confirmed via the actual CI failure (not a guess): after
+    // fixing the built-in-Kotlin collision above, the very next run failed
+    // with `Warning: Failed to find package 'platforms;android-37'` —
+    // Google's SDK repository feed, as seen by this CI runner's
+    // sdkmanager, does not yet serve that platform package, whatever its
+    // real-world release status. AGP 9.1.1/Kotlin 2.2.10 themselves don't
+    // require compileSdk 37 — that's purely a Wear Widget library
+    // requirement — so this toolchain bump still stands on its own at
+    // compileSdk 36. Wear Widget implementation work is blocked until
+    // `platforms;android-37` is confirmed actually resolvable in CI; don't
+    // bump compileSdk back to 37 speculatively, verify the package
+    // resolves first.
     plugins {
         id("com.android.application") version "9.1.1"
         id("com.android.library") version "9.1.1"

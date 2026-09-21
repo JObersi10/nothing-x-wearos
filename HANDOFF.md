@@ -12,27 +12,37 @@ for Wear + RemoteCompose) instead of just the classic full-screen Tile —
 see CLAUDE.md's "Toolchain: AGP 9.1.1 / Kotlin 2.2.10 / compileSdk 37"
 section for the full cascade and why it touched nearly every build file.
 
-Two pushes so far:
-1. `e0cb6f8` — the toolchain bump itself. **Failed CI** on
-   `:bluetooth:assembleDebug` with `Cannot add extension with name
-   'kotlin'` — AGP 9's built-in Kotlin collided with this project's
-   leftover explicit `org.jetbrains.kotlin.android` plugin application.
-2. `4304d63` — the fix: dropped the explicit kotlin-android plugin from all
-   three Android modules (built-in Kotlin now owns that), dropped the
-   now-redundant `kotlinOptions{ jvmTarget }` blocks, bumped the CI
-   `sdkmanager` step to `platforms;android-37`/`build-tools;36.0.0` to match
-   the new compileSdk floor. `:protocol:test` reconfirmed passing locally
-   (17 tests — the "24 tests" figure in an earlier version of this doc was
-   wrong; check `protocol/src/test/` directly if this number drifts again).
-   **CI result not yet confirmed as of this doc update** — check
-   `https://github.com/JObersi10/nothing-x-wearos/actions` (workflow run
-   for commit `4304d63`, branch `claude/ecstatic-galileo-evyo4w`) or PR
-   `https://github.com/JObersi10/nothing-x-wearos/pull/1` directly before
-   assuming green.
+Three pushes so far:
+1. `e0cb6f8` — the toolchain bump itself (compileSdk 37 at the time).
+   **Failed CI** on `:bluetooth:assembleDebug` with `Cannot add extension
+   with name 'kotlin'` — AGP 9's built-in Kotlin collided with this
+   project's leftover explicit `org.jetbrains.kotlin.android` plugin
+   application.
+2. `4304d63` — dropped the explicit kotlin-android plugin from all three
+   Android modules (built-in Kotlin now owns that), dropped the
+   now-redundant `kotlinOptions{ jvmTarget }` blocks. **Also failed CI**,
+   differently: `Warning: Failed to find package 'platforms;android-37'` —
+   Google's SDK repository feed, as this CI runner's sdkmanager sees it,
+   doesn't serve that platform package. `:protocol:test` was green both
+   times (17 tests — the "24 tests" figure in an earlier version of this
+   doc was wrong).
+3. (next commit after this doc update) — stepped `compileSdk`/`targetSdk`
+   back to **36** in `bluetooth`/`wear`/`phone` (AGP 9.1.1/Kotlin 2.2.10
+   don't themselves need 37, only the Wear Widget libraries do), and the CI
+   `sdkmanager` step to `platforms;android-36`. **CI result not yet
+   confirmed as of this doc update** — check
+   `https://github.com/JObersi10/nothing-x-wearos/actions` (branch
+   `claude/ecstatic-galileo-evyo4w`) or PR
+   `https://github.com/JObersi10/nothing-x-wearos/pull/1` before assuming
+   green.
 
-**No Wear Widget implementation exists yet** — this round is purely the
-toolchain prerequisite. `NothingXTileService` (classic ProtoLayout Tile) is
-unchanged and still the only interactive Tile/widget surface in the app.
+**No Wear Widget implementation exists yet, and Phase 2 is now blocked** —
+compileSdk 37 (required for `GlanceWearWidgetService` etc.) isn't
+resolvable by this CI environment's sdkmanager right now. Don't bump
+compileSdk back to 37 speculatively; a future CI run needs to confirm
+`platforms;android-37` actually resolves first. `NothingXTileService`
+(classic ProtoLayout Tile) is unchanged and still the only interactive
+Tile/widget surface in the app.
 
 ## What's done
 

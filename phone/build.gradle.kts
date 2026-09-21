@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.nothingx.phone"
-    compileSdk = 37
+    compileSdk = 36 // see wear/build.gradle.kts — stepped back from 37,
+    // CI's sdkmanager can't resolve that platform package yet
 
     defaultConfig {
         applicationId = "com.nothingx.phone"
@@ -15,7 +16,7 @@ android {
         // dependency declares. 30 is still a perfectly normal phone minSdk
         // (Android 11+).
         minSdk = 30
-        targetSdk = 37
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }

@@ -10,7 +10,10 @@ plugins {
 
 android {
     namespace = "com.nothingx.bluetooth"
-    compileSdk = 37
+    compileSdk = 36 // see settings.gradle.kts: compileSdk 37 (Android 17)
+    // isn't resolvable by this CI runner's sdkmanager feed yet — stepped
+    // back to 36 (Android 16, confirmed available) to unblock CI; bump
+    // back to 37 once that's confirmed fetchable.
 
     defaultConfig {
         minSdk = 30 // Wear OS 3 baseline (Galaxy Watch 4 and newer)
