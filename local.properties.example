@@ -1,0 +1,4 @@
+# Copy to local.properties (gitignored) and point at your Android SDK.
+# On the build laptop referenced in HANDOFF.md:
+# sdk.dir=/path/to/SABRENT/Application/AndroidSDK
+sdk.dir=/path/to/android/sdk

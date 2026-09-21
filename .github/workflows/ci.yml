@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Pure-Kotlin protocol module: the part that's actually testable in any
+      # sandbox, including the one this repo was first built in. Runs first so
+      # a protocol regression fails fast before spending time on Android build.
+      - name: protocol unit tests
+        run: ./gradlew :protocol:test --console=plain
+
+      - name: bluetooth module build
+        run: ./gradlew :bluetooth:assembleDebug --console=plain
+
+      - name: wear debug APK
+        run: ./gradlew :wear:assembleDebug --console=plain
+
+      - name: phone debug APK
+        run: ./gradlew :phone:assembleDebug --console=plain
+
+      - name: Upload wear debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wear-debug-apk
+          path: wear/build/outputs/apk/debug/*.apk
+
+      - name: Upload phone debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: phone-debug-apk
+          path: phone/build/outputs/apk/debug/*.apk
+
+      - name: Upload protocol test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: protocol-test-results
+          path: protocol/build/test-results/test/*.xml
