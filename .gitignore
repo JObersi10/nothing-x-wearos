@@ -10,3 +10,4 @@ local.properties
 *.aab
 .DS_Store
 /GRADLE_USER_HOME_marker
+/logs/

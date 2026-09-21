@@ -1,6 +1,7 @@
 package com.nothingx.wear.connection
 
 import android.content.Context
+import android.util.Log
 import com.nothingx.bluetooth.BondedDevice
 import com.nothingx.bluetooth.ConnectionState
 import com.nothingx.bluetooth.DirectRfcommTransport
@@ -17,6 +18,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+private const val TAG = "NothingX"
 
 /**
  * Process-wide singleton owning the one live [EarbudsTransport] connection,
@@ -120,16 +123,23 @@ object EarbudsConnectionHolder {
 
     /** [address] may be a real Bluetooth MAC (direct connect) or [RELAY_TARGET_ADDRESS]. */
     fun connect(address: String) {
+        Log.i(TAG, "EarbudsConnectionHolder.connect(address=\"$address\")")
         // Checked before touching reconnectJob: a redundant connect() call to
         // the address we're already on (e.g. DeviceDetailScreen's own
         // connect() safety-net firing after the list screen already started
         // one) must be a true no-op — cancelling the reconnect watcher here
         // unconditionally would silently kill it on every such call.
-        if (connectedAddress == address && activeTransport != null) return
+        if (connectedAddress == address && activeTransport != null) {
+            Log.i(TAG, "connect(): already connected/connecting to \"$address\", no-op")
+            return
+        }
         reconnectJob?.cancel()
         connectedAddress = address
         reconnectAttempts = 0
-        val ctx = appContext ?: return
+        val ctx = appContext ?: run {
+            Log.w(TAG, "connect(): appContext is null, init() was never called — dropping connect(\"$address\")")
+            return
+        }
         init(ctx)
         if (address == RELAY_TARGET_ADDRESS || address.startsWith(RELAY_ADDRESS_PREFIX)) {
             val t = relayTransport()
@@ -141,8 +151,10 @@ object EarbudsConnectionHolder {
             // the watch UI no longer connects this way directly; see
             // RELAY_ADDRESS_PREFIX's doc comment.
             val phoneAddress = address.removePrefix(RELAY_ADDRESS_PREFIX).let { if (it == RELAY_TARGET_ADDRESS) "" else it }
+            Log.i(TAG, "connect(): routing to relay transport, phoneAddress=\"$phoneAddress\"" + if (phoneAddress.isEmpty()) " (blank = phone auto-picks)" else "")
             scope.launch { t.connect(phoneAddress) }
         } else {
+            Log.i(TAG, "connect(): routing to direct transport")
             val t = directTransport()
             activate(t)
             scope.launch { t.connect(address) }
@@ -152,7 +164,11 @@ object EarbudsConnectionHolder {
 
     /** Triggers a fresh phone bonded-device lookup; results land in [relayBondedDevices]. */
     fun queryRelayBondedDevices() {
-        val ctx = appContext ?: return
+        Log.i(TAG, "queryRelayBondedDevices()")
+        val ctx = appContext ?: run {
+            Log.w(TAG, "queryRelayBondedDevices(): appContext is null, init() was never called")
+            return
+        }
         init(ctx)
         relayTransport().queryBondedDevices()
     }

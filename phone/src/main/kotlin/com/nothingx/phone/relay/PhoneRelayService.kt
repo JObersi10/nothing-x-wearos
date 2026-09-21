@@ -76,13 +76,15 @@ class PhoneRelayService : WearableListenerService() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.i(TAG, "PhoneRelayService.onCreate()")
         createNotificationChannelIfNeeded()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val address = intent?.getStringExtra(EXTRA_ADDRESS)
+        Log.i(TAG, "onStartCommand: address=$address")
         ensureForeground()
         val t = transportOrCreate()
-        val address = intent?.getStringExtra(EXTRA_ADDRESS)
         if (address != null) {
             scope.launch { t.connect(address) }
         }
@@ -90,6 +92,7 @@ class PhoneRelayService : WearableListenerService() {
     }
 
     override fun onMessageReceived(event: MessageEvent) {
+        Log.i(TAG, "onMessageReceived: path=${event.path} from=${event.sourceNodeId} bytes=${event.data.size}")
         if (event.path == RelayPaths.CMD_QUERY_BONDED_DEVICES) {
             // Read-only lookup for the watch's device picker — deliberately
             // doesn't call ensureForeground()/transportOrCreate(): just
@@ -105,6 +108,7 @@ class PhoneRelayService : WearableListenerService() {
                 RelayPaths.CMD_CONNECT -> {
                     val requested = RelayCodec.decodeConnect(event.data)
                     val target = requested.ifBlank { firstMatchedBondedAddress() }
+                    Log.i(TAG, "CMD_CONNECT: requested=\"$requested\" resolved target=\"$target\"")
                     if (target != null) {
                         t.connect(target)
                     } else {
@@ -136,11 +140,14 @@ class PhoneRelayService : WearableListenerService() {
         BondedDevices.list(this).firstOrNull { it.isSupported }?.address
 
     private fun pushBondedDevices() {
+        val devices = BondedDevices.list(this)
+        Log.i(TAG, "pushBondedDevices: pushing ${devices.size} device(s): " + devices.joinToString { it.name })
         val request = PutDataMapRequest.create(RelayPaths.DATA_BONDED_DEVICES).apply {
-            dataMap.putAll(RelayCodec.bondedDevicesToDataMap(BondedDevices.list(this@PhoneRelayService)))
+            dataMap.putAll(RelayCodec.bondedDevicesToDataMap(devices))
             dataMap.putLong("ts", System.currentTimeMillis())
         }.asPutDataRequest().setUrgent()
         Wearable.getDataClient(this).putDataItem(request)
+            .addOnSuccessListener { Log.i(TAG, "pushBondedDevices: put succeeded") }
             .addOnFailureListener { e -> Log.w(TAG, "pushBondedDevices failed: ${e.message}") }
     }
 

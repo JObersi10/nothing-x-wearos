@@ -523,6 +523,60 @@ Needs a real round: does `CMD_QUERY_BONDED_DEVICES` actually reach
 silently dropped by Play Services for some other reason), does the picker
 list show up with the right devices, does picking one actually connect.
 
+### The "nothing changed" round was a stale-build problem, not a code problem (2026-09-22)
+
+User reported the battery/icon reorder (already landed — see the earlier
+"Icons"/"Battery card" entries, both from well before this session) wasn't
+showing on-device, and that tapping "Buds (phone)" produced nothing in the
+watch's logs at all. A log capture (`adb logs.txt`, uploaded straight to the
+repo root and deleted after reading — don't leave logs committed) confirmed
+it: the capture shows a successful **direct** RFCOMM connect (channel 16,
+`3C:B0:ED:37:6D:78`, `DirectRfcommTransport`'s own `NothingX`-tagged lines)
+and *zero* lines from anything relay/picker-related — not even the tag
+mismatch kind of "zero," the literal absence of a feature that didn't exist
+yet in whatever build produced that capture. Conclusion: the watch/phone are
+running an APK built before this session's (and possibly the last session's)
+source changes. Every "unverified" note in this file up to this point should
+be read as **still genuinely unverified** — nothing in the last two rounds
+of fixes has actually been exercised on-device yet, only re-described from
+old, already-fixed code that happened to still reproduce the old symptom
+because the fix was never installed.
+
+**Do not trust a "still broken" report against this repo's current code
+without first confirming a fresh install** — `./gradlew :wear:assembleDebug
+:phone:assembleDebug && adb install -r wear/build/outputs/apk/debug/wear-debug.apk`
+(and the same `adb install -r` for `phone/build/outputs/apk/debug/phone-debug.apk`
+on the phone), from a checkout of the current branch tip, not a cached APK.
+
+**Logging was also too thin to diagnose this without guessing** — the direct
+path (`DirectRfcommTransport`) was always well-logged (`Log.i` on every
+public call, gated `Log.d` for frame bytes), but the relay path had real
+gaps: `WearRelayTransport.send()` only logged on *failure*, never on a
+send attempt or which nodes it found; `EarbudsConnectionHolder.connect()`
+never logged which transport it routed to or why; `BondedDevices.list()`
+never logged what it actually found bonded, which is the single most useful
+line for the exact bug this round was chasing ("is the earbuds' name even
+being recognized"); `PhoneRelayService.onMessageReceived` never logged
+that a message arrived at all. All of these now log at `Log.i`/`Log.w` —
+`BondedDevices.list()` in particular now logs every bonded device's name,
+address, `isSupported`, and `isUnverified` on every call, on both the watch
+and phone side (it's shared code in `:bluetooth`), so "is the earbuds'
+Bluetooth name matching `NothingDeviceMatcher`'s pattern" is now a
+one-line answer instead of a guess.
+
+**`scripts/capture-log.sh`** replaces "here's a command, hope it's typed
+right" — it clears logcat, captures with the correct filter
+(`NothingX:V NothingXRelay:V AndroidRuntime:E *:S` — the trailing `*:S` is
+load-bearing, it's what silences everything else; the capture that started
+this note was missing it and came back as an 18,000-line dump), and writes
+both a timestamped file and an always-current `logs/latest-log.txt` under
+`logs/` (gitignored — a log capture should never get committed, upload it
+as a chat attachment instead of pushing it to the repo). Takes an optional
+device serial, since the relay path is split across two processes on two
+different physical devices (watch logs `EarbudsConnectionHolder`/
+`WearRelayTransport`; phone logs `PhoneRelayService`/`AutoRelayReceiver`) —
+debugging the relay for real means running it once against each.
+
 ## Icons and branding
 
 `wear/src/main/res/drawable/ic_anc_*.xml`, `ic_arrow_right.xml`, `ic_back.xml`

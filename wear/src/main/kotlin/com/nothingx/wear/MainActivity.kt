@@ -2,6 +2,7 @@ package com.nothingx.wear
 
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +25,8 @@ import com.nothingx.wear.ui.PermissionGate
 import com.nothingx.wear.ui.RelayDeviceListScreen
 import com.nothingx.wear.ui.SettingsScreen
 import com.nothingx.wear.ui.theme.NothingXTheme
+
+private const val TAG = "NothingX"
 
 class MainActivity : ComponentActivity() {
     private val viewModel: DeviceViewModel by viewModels()
@@ -72,7 +75,9 @@ private fun NothingXApp(viewModel: DeviceViewModel) {
         SwipeDismissableNavHost(navController = navController, startDestination = "list") {
             composable("list") {
                 DeviceListScreen(viewModel) { device ->
+                    Log.i(TAG, "DeviceListScreen: tapped \"${device.name}\" (${device.address})")
                     if (device.address == EarbudsConnectionHolder.RELAY_TARGET_ADDRESS) {
+                        Log.i(TAG, "DeviceListScreen: navigating to relayPicker")
                         navController.navigate("relayPicker")
                     } else {
                         Toast.makeText(context, "Connecting to ${device.name}…", Toast.LENGTH_SHORT).show()
@@ -82,6 +87,7 @@ private fun NothingXApp(viewModel: DeviceViewModel) {
             }
             composable("relayPicker") {
                 RelayDeviceListScreen(viewModel) { device ->
+                    Log.i(TAG, "RelayDeviceListScreen: picked \"${device.name}\" (${device.address})")
                     Toast.makeText(context, "Connecting to ${device.name}…", Toast.LENGTH_SHORT).show()
                     viewModel.connect(EarbudsConnectionHolder.RELAY_ADDRESS_PREFIX + device.address, device.name)
                 }

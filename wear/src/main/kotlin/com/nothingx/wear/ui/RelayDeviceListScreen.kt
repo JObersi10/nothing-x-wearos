@@ -1,5 +1,6 @@
 package com.nothingx.wear.ui
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -17,6 +18,8 @@ import androidx.wear.compose.material.Text
 import com.nothingx.bluetooth.BondedDevice
 import com.nothingx.wear.data.DeviceViewModel
 
+private const val TAG = "NothingX"
+
 /**
  * Device picker for the phone relay path. Replaces the old "tap Buds (phone)
  * and hope the auto-pick on the phone resolves the right device" flow, which
@@ -32,6 +35,7 @@ fun RelayDeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedD
     val devices by viewModel.relayBondedDevices.collectAsState()
 
     LaunchedEffect(Unit) {
+        Log.i(TAG, "RelayDeviceListScreen: entered, querying phone for bonded devices")
         viewModel.queryRelayBondedDevices()
     }
 

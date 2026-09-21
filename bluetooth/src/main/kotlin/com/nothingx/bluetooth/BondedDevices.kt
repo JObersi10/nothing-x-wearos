@@ -6,7 +6,10 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.core.content.ContextCompat
+
+private const val TAG = "NothingX"
 
 data class BondedDevice(val name: String, val address: String, val isSupported: Boolean, val isUnverified: Boolean)
 
@@ -16,13 +19,22 @@ object BondedDevices {
     fun list(context: Context): List<BondedDevice> {
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
             PackageManager.PERMISSION_GRANTED
-        if (!granted) return emptyList()
+        if (!granted) {
+            Log.w(TAG, "BondedDevices.list: BLUETOOTH_CONNECT not granted, returning empty")
+            return emptyList()
+        }
 
         val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-            ?: return emptyList()
-        if (!adapter.isEnabled) return emptyList()
+        if (adapter == null) {
+            Log.w(TAG, "BondedDevices.list: no BluetoothAdapter on this device")
+            return emptyList()
+        }
+        if (!adapter.isEnabled) {
+            Log.w(TAG, "BondedDevices.list: Bluetooth adapter is disabled")
+            return emptyList()
+        }
 
-        return adapter.bondedDevices.orEmpty().map { device ->
+        val result = adapter.bondedDevices.orEmpty().map { device ->
             val name = device.name ?: device.address
             BondedDevice(
                 name = name,
@@ -31,5 +43,10 @@ object BondedDevices {
                 isUnverified = NothingDeviceMatcher.isUnverifiedCmf(name),
             )
         }.sortedWith(compareByDescending<BondedDevice> { it.isSupported }.thenBy { it.name })
+
+        Log.i(TAG, "BondedDevices.list: ${result.size} bonded device(s): " + result.joinToString { d ->
+            "${d.name} (${d.address}, supported=${d.isSupported}, unverified=${d.isUnverified})"
+        })
+        return result
     }
 }

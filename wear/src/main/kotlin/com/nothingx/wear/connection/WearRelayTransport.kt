@@ -49,13 +49,25 @@ class WearRelayTransport(context: Context) : EarbudsTransport {
     val bondedDevices: StateFlow<List<BondedDevice>> = _bondedDevices.asStateFlow()
 
     private val dataListener = DataClient.OnDataChangedListener { events ->
+        Log.d(TAG, "dataListener: ${events.count} event(s)")
         for (event in events) {
             if (event.type != DataEvent.TYPE_CHANGED) continue
             val map = DataMapItem.fromDataItem(event.dataItem).dataMap
             when (event.dataItem.uri.path) {
-                RelayPaths.DATA_DEVICE_STATE -> _deviceState.value = RelayCodec.deviceStateFromDataMap(map)
-                RelayPaths.DATA_CONNECTION_STATE -> _connectionState.value = RelayCodec.connectionStateFromDataMap(map)
-                RelayPaths.DATA_BONDED_DEVICES -> _bondedDevices.value = RelayCodec.bondedDevicesFromDataMap(map)
+                RelayPaths.DATA_DEVICE_STATE -> {
+                    Log.d(TAG, "received DATA_DEVICE_STATE")
+                    _deviceState.value = RelayCodec.deviceStateFromDataMap(map)
+                }
+                RelayPaths.DATA_CONNECTION_STATE -> {
+                    Log.d(TAG, "received DATA_CONNECTION_STATE: ${map.getString("kind")}")
+                    _connectionState.value = RelayCodec.connectionStateFromDataMap(map)
+                }
+                RelayPaths.DATA_BONDED_DEVICES -> {
+                    val devices = RelayCodec.bondedDevicesFromDataMap(map)
+                    Log.i(TAG, "received DATA_BONDED_DEVICES: ${devices.size} device(s): " + devices.joinToString { it.name })
+                    _bondedDevices.value = devices
+                }
+                else -> Log.d(TAG, "dataListener: unhandled path ${event.dataItem.uri.path}")
             }
         }
         events.release()
@@ -71,14 +83,17 @@ class WearRelayTransport(context: Context) : EarbudsTransport {
     }
 
     private fun send(path: String, payload: ByteArray = ByteArray(0)) {
+        Log.i(TAG, "send $path: looking up connected nodes…")
         nodeClient.connectedNodes
             .addOnSuccessListener { nodes ->
                 if (nodes.isEmpty()) {
-                    Log.w(TAG, "send $path: no connected nodes (phone unreachable)")
+                    Log.w(TAG, "send $path: no connected nodes (phone unreachable — is the phone app's Bluetooth/Wi-Fi Data Layer link up?)")
                     return@addOnSuccessListener
                 }
+                Log.i(TAG, "send $path: ${nodes.size} connected node(s): " + nodes.joinToString { it.displayName })
                 for (node in nodes) {
                     messageClient.sendMessage(node.id, path, payload)
+                        .addOnSuccessListener { Log.i(TAG, "send $path to ${node.displayName}: delivered to Play Services") }
                         .addOnFailureListener { e -> Log.w(TAG, "send $path to ${node.id} failed: ${e.message}") }
                 }
             }
@@ -92,6 +107,7 @@ class WearRelayTransport(context: Context) : EarbudsTransport {
 
     /** Asks the phone for its bonded-device list; response lands in [bondedDevices]. */
     fun queryBondedDevices() {
+        Log.i(TAG, "queryBondedDevices() via phone relay")
         send(RelayPaths.CMD_QUERY_BONDED_DEVICES)
     }
 
