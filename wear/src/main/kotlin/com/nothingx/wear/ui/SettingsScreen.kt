@@ -1,24 +1,32 @@
 package com.nothingx.wear.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
+import androidx.wear.compose.material.InlineSlider
 import androidx.wear.compose.material.ListHeader
 import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.Switch
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.ToggleChip
 import androidx.wear.compose.material.ToggleChipDefaults
+import com.nothingx.protocol.EarFitTestResult
 import com.nothingx.wear.data.DeviceViewModel
+
+private const val MAX_BASS_LEVEL = 5
 
 /**
  * Settings screen — card-per-feature list, styled after the official Nothing X
@@ -32,6 +40,15 @@ import com.nothingx.wear.data.DeviceViewModel
 @Composable
 fun SettingsScreen(viewModel: DeviceViewModel) {
     val deviceState by viewModel.deviceState.collectAsState()
+    val context = LocalContext.current
+
+    // Fit test results arrive asynchronously off the RFCOMM socket, not as a
+    // direct response to tapping the chip — a toast is the only way to
+    // surface that without the user staring at the screen waiting.
+    LaunchedEffect(deviceState.earFitTestResult) {
+        val result = deviceState.earFitTestResult ?: return@LaunchedEffect
+        Toast.makeText(context, fitTestToastText(result), Toast.LENGTH_LONG).show()
+    }
 
     ScalingLazyColumn(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
@@ -54,7 +71,7 @@ fun SettingsScreen(viewModel: DeviceViewModel) {
                 checked = deviceState.inEarDetectionEnabled ?: false,
                 onCheckedChange = { viewModel.setInEarDetection(it) },
                 label = { Text("In-Ear Detection") },
-                toggleControl = { androidx.wear.compose.material.Switch(checked = deviceState.inEarDetectionEnabled ?: false) },
+                toggleControl = { Switch(checked = deviceState.inEarDetectionEnabled ?: false) },
                 colors = ToggleChipDefaults.toggleChipColors(),
             )
         }
@@ -64,7 +81,7 @@ fun SettingsScreen(viewModel: DeviceViewModel) {
                 checked = deviceState.lowLatencyEnabled ?: false,
                 onCheckedChange = { viewModel.setLowLatency(it) },
                 label = { Text("Low Lag Mode") },
-                toggleControl = { androidx.wear.compose.material.Switch(checked = deviceState.lowLatencyEnabled ?: false) },
+                toggleControl = { Switch(checked = deviceState.lowLatencyEnabled ?: false) },
                 colors = ToggleChipDefaults.toggleChipColors(),
             )
         }
@@ -74,9 +91,7 @@ fun SettingsScreen(viewModel: DeviceViewModel) {
                 checked = deviceState.personalizedAncEnabled ?: false,
                 onCheckedChange = { viewModel.setPersonalizedAnc(it) },
                 label = { Text("Personalized ANC") },
-                toggleControl = {
-                    androidx.wear.compose.material.Switch(checked = deviceState.personalizedAncEnabled ?: false)
-                },
+                toggleControl = { Switch(checked = deviceState.personalizedAncEnabled ?: false) },
                 colors = ToggleChipDefaults.toggleChipColors(),
             )
         }
@@ -89,16 +104,26 @@ fun SettingsScreen(viewModel: DeviceViewModel) {
                 secondaryLabel = {
                     Text(if (deviceState.bassEnhanceEnabled == true) "Level ${deviceState.bassLevel ?: 2}" else "Off")
                 },
-                toggleControl = {
-                    androidx.wear.compose.material.Switch(checked = deviceState.bassEnhanceEnabled ?: false)
-                },
+                toggleControl = { Switch(checked = deviceState.bassEnhanceEnabled ?: false) },
                 colors = ToggleChipDefaults.toggleChipColors(),
             )
+        }
+        if (deviceState.bassEnhanceEnabled == true) {
+            item {
+                InlineSlider(
+                    value = deviceState.bassLevel ?: 2,
+                    onValueChange = { viewModel.setBassEnhance(true, it) },
+                    valueProgression = 0..MAX_BASS_LEVEL,
+                )
+            }
         }
 
         item {
             Chip(
-                onClick = { viewModel.ringBuds(true) },
+                onClick = {
+                    viewModel.ringBuds(true)
+                    Toast.makeText(context, "Ringing earbuds", Toast.LENGTH_SHORT).show()
+                },
                 label = { Text("Find My Earbuds") },
                 colors = ChipDefaults.chipColors(backgroundColor = MaterialTheme.colors.surface),
             )
@@ -106,7 +131,14 @@ fun SettingsScreen(viewModel: DeviceViewModel) {
 
         item {
             Chip(
-                onClick = { viewModel.launchEarFitTest() },
+                onClick = {
+                    viewModel.launchEarFitTest()
+                    Toast.makeText(
+                        context,
+                        "Keep both earbuds in your ears during the test",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                },
                 label = { Text("Ear Tip Fit Test") },
                 // ear-web reads these two bytes but never documents what the
                 // values mean beyond "left/right result" — showing the raw
@@ -139,3 +171,6 @@ fun SettingsScreen(viewModel: DeviceViewModel) {
         }
     }
 }
+
+private fun fitTestToastText(result: EarFitTestResult): String =
+    "Fit test result — L ${result.left} • R ${result.right}"
