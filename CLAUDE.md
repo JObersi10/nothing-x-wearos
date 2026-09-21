@@ -126,20 +126,35 @@ kotlin-android specifically.
 #### compileSdk stepped back to 36 — 37 isn't resolvable in CI yet
 
 The whole point of this toolchain bump was compileSdk 37 for Wear Widgets.
-After fixing the built-in-Kotlin collision above, the very next CI run
-failed differently — cleanly, from the actual sdkmanager output, not
-guessed: `Warning: Failed to find package 'platforms;android-37'`.
-Google's SDK repository feed, as seen by this CI runner, doesn't serve that
-platform package yet, regardless of Android 17's real-world release status.
+After fixing the built-in-Kotlin collision above, the next CI run failed
+differently — cleanly, from the actual sdkmanager output, not guessed:
+`Warning: Failed to find package 'platforms;android-37'`. Google's SDK
+repository feed, as seen by this CI runner, doesn't serve that platform
+package yet, regardless of Android 17's real-world release status.
 AGP 9.1.1/Kotlin 2.2.10 don't themselves require compileSdk 37 — only the
 Wear Widget libraries do — so `compileSdk`/`targetSdk` in `bluetooth`,
 `wear`, and `phone` were stepped back to **36** (and the CI `sdkmanager`
-step to `platforms;android-36`) to get the rest of the toolchain bump
-green on its own. **Wear Widget implementation (Phase 2) is blocked on
-this** — don't bump compileSdk back to 37 speculatively; confirm
-`platforms;android-37` actually resolves via a CI run first (or find the
-right channel/package id if it turns out to need one, the way old Android
-preview SDKs used codename-based package ids before their numeric release).
+step to `platforms;android-36`).
+
+That alone still wasn't enough — one more CI round found AGP's own lint
+catching that `compose-bom 2026.09.00` pulls in `compose-ui 1.12.1`, which
+independently hard-requires compileSdk ≥ 37 (`compose-ui 1.12.0`, shipped
+starting `compose-bom 2026.04.00`, is where that floor started). Fixed by
+pinning `wear/build.gradle.kts`'s `compose-bom` to `2025.12.01` (last BOM
+release still on compose-ui 1.11.x) and `androidx.wear.compose:*` to
+`1.5.6` (Dec 2025, predates wear-compose's own jump to the same compose-ui
+floor). **This is what finally got CI green** on this toolchain round
+(commit `33e693c`) — four fix cycles total from the original bump.
+
+**Wear Widget implementation (Phase 2) stays blocked** on compileSdk 37 —
+don't bump compileSdk, compose-bom past `2025.12.01`, or wear-compose past
+`1.5.6` speculatively. Confirm `platforms;android-37` actually resolves via
+a CI run first (or find the right channel/package id if it turns out to
+need one, the way old Android preview SDKs used codename-based package ids
+before their numeric release — plausible here since Android's own docs
+still labelled it "Cinnamon Bun Preview" in the SDK Manager UI as of this
+research, suggesting Android 17/API 37 may still be preview-channel-only
+despite marketing as "released").
 
 ### Why `protocol`'s Kotlin JVM toolchain is 21, not 17
 

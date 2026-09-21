@@ -12,37 +12,54 @@ for Wear + RemoteCompose) instead of just the classic full-screen Tile —
 see CLAUDE.md's "Toolchain: AGP 9.1.1 / Kotlin 2.2.10 / compileSdk 37"
 section for the full cascade and why it touched nearly every build file.
 
-Three pushes so far:
+Four pushes, now **CI green** (`33e693c`, run
+[35562509118](https://github.com/JObersi10/nothing-x-wearos/actions/runs/35562509118)):
 1. `e0cb6f8` — the toolchain bump itself (compileSdk 37 at the time).
-   **Failed CI** on `:bluetooth:assembleDebug` with `Cannot add extension
-   with name 'kotlin'` — AGP 9's built-in Kotlin collided with this
-   project's leftover explicit `org.jetbrains.kotlin.android` plugin
-   application.
+   **Failed** on `:bluetooth:assembleDebug`: `Cannot add extension with
+   name 'kotlin'` — AGP 9's built-in Kotlin collided with this project's
+   leftover explicit `org.jetbrains.kotlin.android` plugin application.
 2. `4304d63` — dropped the explicit kotlin-android plugin from all three
    Android modules (built-in Kotlin now owns that), dropped the
-   now-redundant `kotlinOptions{ jvmTarget }` blocks. **Also failed CI**,
+   now-redundant `kotlinOptions{ jvmTarget }` blocks. **Failed**
    differently: `Warning: Failed to find package 'platforms;android-37'` —
    Google's SDK repository feed, as this CI runner's sdkmanager sees it,
-   doesn't serve that platform package. `:protocol:test` was green both
-   times (17 tests — the "24 tests" figure in an earlier version of this
-   doc was wrong).
-3. (next commit after this doc update) — stepped `compileSdk`/`targetSdk`
-   back to **36** in `bluetooth`/`wear`/`phone` (AGP 9.1.1/Kotlin 2.2.10
-   don't themselves need 37, only the Wear Widget libraries do), and the CI
-   `sdkmanager` step to `platforms;android-36`. **CI result not yet
-   confirmed as of this doc update** — check
-   `https://github.com/JObersi10/nothing-x-wearos/actions` (branch
-   `claude/ecstatic-galileo-evyo4w`) or PR
-   `https://github.com/JObersi10/nothing-x-wearos/pull/1` before assuming
-   green.
+   doesn't serve that platform package regardless of Android 17's
+   real-world release status.
+3. `3558657` — stepped `compileSdk`/`targetSdk` back to **36** and the CI
+   `sdkmanager` step to `platforms;android-36`. **Still failed**: AGP's own
+   lint caught that `compose-bom 2026.09.00` pulls in `compose-ui 1.12.1`,
+   which itself hard-requires compileSdk ≥ 37 independent of anything else.
+4. `33e693c` — pinned `compose-bom` to `2025.12.01` (last release on
+   compose-ui 1.11.x) and `androidx.wear.compose.*` to `1.5.6` (predates
+   wear-compose's own jump to the same compose-ui floor). **CI green** —
+   `protocol` tests, `bluetooth`/`wear`/`phone` `assembleDebug` all passed.
 
-**No Wear Widget implementation exists yet, and Phase 2 is now blocked** —
-compileSdk 37 (required for `GlanceWearWidgetService` etc.) isn't
-resolvable by this CI environment's sdkmanager right now. Don't bump
-compileSdk back to 37 speculatively; a future CI run needs to confirm
-`platforms;android-37` actually resolves first. `NothingXTileService`
-(classic ProtoLayout Tile) is unchanged and still the only interactive
-Tile/widget surface in the app.
+**No Wear Widget implementation exists yet, and Phase 2 is blocked** —
+compileSdk 37 (required for `GlanceWearWidgetService`, and now also by
+Compose 1.12+) isn't resolvable by this CI environment's sdkmanager right
+now. Don't bump compileSdk back to 37, or any Compose library past the
+1.11.x/wear-compose-1.5.x line, until a future CI run confirms
+`platforms;android-37` actually resolves. `NothingXTileService` (classic
+ProtoLayout Tile) is unchanged and still the only interactive Tile/widget
+surface in the app — this whole round shipped zero feature changes, purely
+toolchain (AGP 8.5.2→9.1.1, Kotlin 1.9.24→2.2.10, Gradle wrapper
+8.7→9.3.1), which is still a real, useful step even without compileSdk 37
+yet.
+
+### APK downloads (commit `33e693c`, CI run 44)
+
+GitHub artifact downloads require being logged into GitHub in the browser
+(the API zip URLs need an auth token, not just the link) — open the run
+page and download from there:
+- Run page: https://github.com/JObersi10/nothing-x-wearos/actions/runs/35562509118
+- `wear-debug-apk` (13.5 MB) — the actual watch app
+- `phone-debug-apk` (2.6 MB) — scaffold only, not functional, install only
+  if curious
+- `protocol-test-results` — JUnit XML, not needed for manual testing
+
+Artifacts expire 2026-12-20. Install via `adb install -r
+wear-debug-apk/wear-debug.apk` after unzipping, or sideload however you
+normally do.
 
 ## What's done
 
