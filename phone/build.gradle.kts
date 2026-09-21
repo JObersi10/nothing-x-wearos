@@ -9,7 +9,11 @@ android {
 
     defaultConfig {
         applicationId = "com.nothingx.phone"
-        minSdk = 26
+        // Must be >= :bluetooth's minSdk (30, set for Wear OS 3) since phone
+        // depends on it — the manifest merger rejects a lower minSdk than a
+        // dependency declares. 30 is still a perfectly normal phone minSdk
+        // (Android 11+).
+        minSdk = 30
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
