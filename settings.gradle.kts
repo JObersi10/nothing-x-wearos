@@ -18,10 +18,25 @@ pluginManagement {
     // org.jetbrains.kotlin.plugin.compose Gradle plugin instead of
     // composeOptions{} — exactly the contingency this comment used to warn
     // about ("if Kotlin ever gets bumped to 2.0+, switch to the plugin").
+    //
+    // No org.jetbrains.kotlin.android entry: AGP 9.0+ ships "built-in
+    // Kotlin" and applies it by default, registering the `kotlin` project
+    // extension itself. Explicitly applying kotlin-android on top (as this
+    // project did through AGP 8) collides with that ("Cannot add extension
+    // with name 'kotlin', as there is an extension already registered with
+    // that name") — confirmed as the exact CI failure on the first Phase 1
+    // push. Fix is to stop applying kotlin-android at all (not to opt out
+    // via android.builtInKotlin=false in gradle.properties) since that
+    // opt-out is explicitly temporary and goes away entirely in AGP 10 — no
+    // reason to build on a flag with a known expiry. bluetooth/wear/phone's
+    // build.gradle.kts no longer apply org.jetbrains.kotlin.android; their
+    // kotlinOptions{} blocks were dropped too since built-in Kotlin's
+    // jvmTarget defaults to android.compileOptions.targetCompatibility.
+    // org.jetbrains.kotlin.jvm stays — :protocol is pure JVM, never touches
+    // AGP, and built-in Kotlin doesn't apply to it at all.
     plugins {
         id("com.android.application") version "9.1.1"
         id("com.android.library") version "9.1.1"
-        id("org.jetbrains.kotlin.android") version "2.2.10"
         id("org.jetbrains.kotlin.jvm") version "2.2.10"
         id("org.jetbrains.kotlin.plugin.compose") version "2.2.10"
     }

@@ -1,6 +1,11 @@
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.android")
+    // No org.jetbrains.kotlin.android plugin here: AGP 9's built-in Kotlin
+    // (default since 9.0) registers the `kotlin` project extension itself —
+    // applying kotlin-android on top collides with it ("Cannot add
+    // extension with name 'kotlin', as there is an extension already
+    // registered with that name"). See settings.gradle.kts for the full
+    // AGP 9 migration note.
 }
 
 android {
@@ -15,9 +20,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // No kotlinOptions{} block: built-in Kotlin's jvmTarget defaults to
+    // compileOptions.targetCompatibility above (17) automatically.
 }
 
 dependencies {

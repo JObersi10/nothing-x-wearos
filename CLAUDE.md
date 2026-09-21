@@ -92,7 +92,36 @@ Consequences, some already anticipated by older comments in this file:
   familiar `uses-sdk:minSdkVersion X cannot be smaller than version Y
   declared in library Z` error (same shape as the `phone`/`bluetooth`
   minSdk mismatch fixed earlier), that's this exact tradeoff surfacing for
-  real, not a new bug.
+  real, not a new bug. Also no longer a real constraint to route around —
+  user said not to worry about older Wear OS compatibility at all (Wear OS
+  4+ baseline is fine), so if Glance-for-Wear forces minSdk up, just take
+  it.
+
+#### AGP 9's built-in Kotlin broke the first Phase 1 CI push
+
+First push of this toolchain bump failed `:bluetooth:assembleDebug` (and
+would've failed `wear`/`phone` too — same plugin pattern in all three) with:
+`Cannot add extension with name 'kotlin', as there is an extension already
+registered with that name`. Cause: AGP 9.0+ ships "built-in Kotlin" and
+enables it by default, which registers the `kotlin` project extension
+itself; this project's module `build.gradle.kts` files still explicitly
+applied `id("org.jetbrains.kotlin.android")` on top (carried over from AGP
+8, where that was mandatory), and the second registration collides.
+
+There's a temporary opt-out (`android.builtInKotlin=false` in
+`gradle.properties`) but it's explicitly a stopgap — AGP 10 (expected later
+in 2026) removes it entirely, built-in Kotlin becomes mandatory. Used the
+real fix instead: dropped `org.jetbrains.kotlin.android` from
+`bluetooth`/`wear`/`phone`'s `plugins{}` blocks and from
+`settings.gradle.kts`'s `pluginManagement.plugins` (nothing applies it
+anymore, so no reason to pin a version for it). Each module's `kotlinOptions
+{ jvmTarget = "17" }` block was dropped too — built-in Kotlin's jvmTarget
+defaults to `android.compileOptions.targetCompatibility` (still explicitly
+set to 17 in each module), so the old block was redundant, not required.
+`org.jetbrains.kotlin.jvm` (used by `:protocol`, which never touches AGP)
+and `org.jetbrains.kotlin.plugin.compose` (Compose compiler, a separate
+plugin from kotlin-android) both stay as-is — this only affects
+kotlin-android specifically.
 
 ### Why `protocol`'s Kotlin JVM toolchain is 21, not 17
 

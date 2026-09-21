@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // No org.jetbrains.kotlin.android plugin: AGP 9's built-in Kotlin
+    // collides with it. See bluetooth/build.gradle.kts for the full note.
 }
 
 android {
@@ -33,9 +34,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // No kotlinOptions{} block: built-in Kotlin's jvmTarget defaults to
+    // compileOptions.targetCompatibility above (17) automatically.
 }
 
 dependencies {

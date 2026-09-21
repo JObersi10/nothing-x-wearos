@@ -1,6 +1,9 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    // No org.jetbrains.kotlin.android plugin: AGP 9's built-in Kotlin
+    // (default since AGP 9.0) already registers the `kotlin` extension —
+    // applying kotlin-android too collides with it. See
+    // settings.gradle.kts and bluetooth/build.gradle.kts for the full note.
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -51,9 +54,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
+    // No kotlinOptions{} block: built-in Kotlin's jvmTarget defaults to
+    // compileOptions.targetCompatibility above (17) automatically.
 
     buildTypes {
         release {
