@@ -35,20 +35,28 @@ pluginManagement {
     // org.jetbrains.kotlin.jvm stays — :protocol is pure JVM, never touches
     // AGP, and built-in Kotlin doesn't apply to it at all.
     //
-    // compileSdk/targetSdk in the Android modules are 36, NOT 37, even
-    // though Wear Widgets need 37 (the whole reason for this toolchain
-    // bump). Confirmed via the actual CI failure (not a guess): after
-    // fixing the built-in-Kotlin collision above, the very next run failed
-    // with `Warning: Failed to find package 'platforms;android-37'` —
-    // Google's SDK repository feed, as seen by this CI runner's
-    // sdkmanager, does not yet serve that platform package, whatever its
-    // real-world release status. AGP 9.1.1/Kotlin 2.2.10 themselves don't
-    // require compileSdk 37 — that's purely a Wear Widget library
-    // requirement — so this toolchain bump still stands on its own at
-    // compileSdk 36. Wear Widget implementation work is blocked until
-    // `platforms;android-37` is confirmed actually resolvable in CI; don't
-    // bump compileSdk back to 37 speculatively, verify the package
-    // resolves first.
+    // compileSdk/targetSdk in the Android modules are 37 — this took three
+    // rounds to actually land, worth recording so nobody "fixes" it back
+    // down again on a stale assumption:
+    //   1. `platforms;android-37` (no minor version) failed sdkmanager with
+    //      "Failed to find package" — looked at the time like Android 17/
+    //      API 37 just wasn't resolvable in CI yet, so compileSdk got
+    //      stepped back to 36 (and compose-bom/wear-compose down to
+    //      versions that don't need 37) to get the toolchain bump green on
+    //      its own merits.
+    //   2. A diagnostic CI step (`sdkmanager --list`, since removed once it
+    //      had answered the question) showed the real package id: this
+    //      Android release cycle versions the platform itself with a minor
+    //      number, same idea as `-ext14` extension levels but for the
+    //      platform baseline — `platforms;android-37.0`, `37.1`, `37.2` all
+    //      exist as distinct packages, alongside `build-tools;37.0.0`.
+    //      `platforms;android-37` (bare) was never going to resolve; it was
+    //      never the package's real name.
+    //   3. CI step fixed to install `platforms;android-37.0` and
+    //      `build-tools;37.0.0` — AGP's `compileSdk = 37` (a plain Int)
+    //      resolves to that `.0` baseline. Confirmed green; compileSdk 37
+    //      and the Compose versions that need it (compose-bom 2026.09.00,
+    //      wear-compose 1.6.2) are back.
     plugins {
         id("com.android.application") version "9.1.1"
         id("com.android.library") version "9.1.1"

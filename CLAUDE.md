@@ -146,15 +146,18 @@ release still on compose-ui 1.11.x) and `androidx.wear.compose:*` to
 floor). **This is what finally got CI green** on this toolchain round
 (commit `33e693c`) — four fix cycles total from the original bump.
 
-**Wear Widget implementation (Phase 2) stays blocked** on compileSdk 37 —
-don't bump compileSdk, compose-bom past `2025.12.01`, or wear-compose past
-`1.5.6` speculatively. Confirm `platforms;android-37` actually resolves via
-a CI run first (or find the right channel/package id if it turns out to
-need one, the way old Android preview SDKs used codename-based package ids
-before their numeric release — plausible here since Android's own docs
-still labelled it "Cinnamon Bun Preview" in the SDK Manager UI as of this
-research, suggesting Android 17/API 37 may still be preview-channel-only
-despite marketing as "released").
+**Resolved (2026-09-21, same day)**: the real package id is
+`platforms;android-37.0`, not bare `platforms;android-37` — this Android
+release cycle versions the platform baseline itself with a minor number
+(`37.0`/`37.1`/`37.2` all exist as separate SDK packages), which a
+diagnostic CI step (`sdkmanager --list`, since removed) confirmed directly
+rather than guessing further. CI's `sdkmanager` step now installs
+`platforms;android-37.0` + `build-tools;37.0.0`; `compileSdk`/`targetSdk`
+are back to 37 in `bluetooth`/`wear`/`phone`, and `wear`'s `compose-bom`/
+`androidx.wear.compose.*` are back to `2026.09.00`/`1.6.2`. **Wear Widget
+implementation (Phase 2) is unblocked** — compileSdk 37 is confirmed
+resolvable in CI as of commit (see HANDOFF.md for the exact SHA). Not
+started yet.
 
 ### Why `protocol`'s Kotlin JVM toolchain is 21, not 17
 

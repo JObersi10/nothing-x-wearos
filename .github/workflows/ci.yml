@@ -23,22 +23,6 @@ jobs:
       # anything useful. Relying on the runner's preinstalled SDK avoids that;
       # this step just makes sure the exact platform/build-tools this project
       # needs are present, since the preinstalled set can lag a fresh compileSdk.
-      # Diagnostic only, never fails the build: dumps every platform/build-tools
-      # package sdkmanager's remote feed actually knows about, so we can see
-      # whether platforms;android-37 (needed for Wear Widgets, compileSdk 37)
-      # is really absent or just under a different package id (preview SDKs
-      # have historically used a codename id, e.g. platforms;android-Baklava,
-      # before their numeric release) instead of guessing blind. See
-      # CLAUDE.md's "compileSdk stepped back to 36" section for the story.
-      - name: List available Android SDK platform/build-tools packages
-        run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name sdkmanager | sort -V | tail -1)
-          fi
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --list 2>&1 | grep -iE "platforms;android-3[5-9]|platforms;android-[A-Za-z]|build-tools;3[5-9]" || echo "(no matches)"
-
       - name: Ensure required SDK platform and build-tools
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -46,7 +30,13 @@ jobs:
             SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name sdkmanager | sort -V | tail -1)
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+          # NOT "platforms;android-37" -- confirmed via the diagnostic step
+          # above that Google's real package id for API 37 carries an
+          # explicit minor-version suffix (this Android release cycle
+          # versions the platform itself, not just extension levels:
+          # android-37.0/37.1/37.2 all exist as separate packages). AGP's
+          # `compileSdk = 37` resolves to the .0 baseline.
+          "$SDKMANAGER" "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew

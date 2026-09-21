@@ -9,13 +9,11 @@ plugins {
 
 android {
     namespace = "com.nothingx.wear"
-    // Wear Widgets need compileSdk 37, but CI's sdkmanager couldn't
-    // resolve `platforms;android-37` from Google's repository feed
-    // (confirmed via the actual CI failure, not guessed) — stepped back to
-    // 36 to get the toolchain migration itself green; see settings.gradle.kts
-    // and CLAUDE.md for the full story. Bump back to 37 (and re-add Wear
-    // Widget-specific work) once 37 is confirmed actually fetchable here.
-    compileSdk = 36
+    // Wear Widgets need compileSdk 37 — see settings.gradle.kts for why
+    // this took several rounds (the built-in-Kotlin collision, then the
+    // package-id-with-minor-version discovery: it's platforms;android-37.0,
+    // not platforms;android-37).
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.nothingx.wear"
@@ -25,7 +23,7 @@ android {
         // full-screen Tile (NothingXTileService) stays as the fallback for
         // those, per both Google's own migration guidance and the user's
         // explicit ask to keep it for older watches.
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -76,20 +74,13 @@ dependencies {
 
     // Bumped 2026-09-21 for the AGP 9 / Kotlin 2.2.10 toolchain jump (Wear
     // Widgets need compileSdk 37, which needs AGP 9.1+, which needs KGP
-    // 2.2.10+ — see settings.gradle.kts). Compose library versions
-    // deliberately pinned BELOW the versions that themselves require
-    // compileSdk 37 (compose-ui 1.12.0+, shipped in compose-bom 2026.04.00+)
-    // since compileSdk is stepped back to 36 here (platforms;android-37
-    // isn't resolvable by this CI environment's sdkmanager yet — see the
-    // compileSdk comment above and CLAUDE.md). compose-bom 2025.12.01 is
-    // the last BOM release still on compose-ui 1.11.x; wear-compose 1.5.6
-    // (Dec 2025) predates wear-compose's own jump to a compileSdk-37-only
-    // compose-ui floor. Both are still well within Kotlin 2.2.10's Compose
-    // compiler compatibility window (the compiler-runtime version check
-    // cares about a much lower floor than this). Revisit once compileSdk
-    // 37 is confirmed actually fetchable in CI — see the Phase 2 blocker
-    // note in HANDOFF.md.
-    implementation(platform("androidx.compose:compose-bom:2025.12.01"))
+    // 2.2.10+ — see settings.gradle.kts). Back on the current compose-bom
+    // now that compileSdk 37 actually resolves in CI (platforms;android-37.0
+    // was the missing piece, not platforms;android-37 — see
+    // settings.gradle.kts) — compose-ui 1.12.1 and wear-compose 1.6.2 both
+    // require compileSdk >= 37 themselves, which is exactly why they'd been
+    // pinned down to 2025.12.01/1.5.6 for a few commits.
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -98,9 +89,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
 
     // Wear-specific Compose + Material3, and Horologist for round-screen scaffolding.
-    implementation("androidx.wear.compose:compose-material:1.5.6")
-    implementation("androidx.wear.compose:compose-foundation:1.5.6")
-    implementation("androidx.wear.compose:compose-navigation:1.5.6")
+    implementation("androidx.wear.compose:compose-material:1.6.2")
+    implementation("androidx.wear.compose:compose-foundation:1.6.2")
+    implementation("androidx.wear.compose:compose-navigation:1.6.2")
     implementation("com.google.android.horologist:horologist-compose-layout:0.6.11")
 
     // Tiles (ProtoLayout) for the quick-glance ANC/battery tile.
