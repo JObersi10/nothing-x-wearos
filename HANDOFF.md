@@ -4,11 +4,10 @@ Last updated: 2026-09-22. Responding to the user's first real hardware pass
 (six bugs reported: auto-open timing, missing icons, dead Find My Earbuds,
 stale "Connected" status, endless reconnect notifications, stuck battery,
 plus phone relay not working/confusing). All six addressed in code this
-round — **none of it has touched real hardware yet.** CI status: pending on
-the commit this round pushes; check
-https://github.com/JObersi10/nothing-x-wearos/actions or PR
-https://github.com/JObersi10/nothing-x-wearos/pull/1 before trusting
-anything below as "green".
+round. **CI is confirmed green** on commit `2f41740` (protocol tests,
+bluetooth build, wear debug APK, phone debug APK all passed — see APK
+downloads below for the run). **None of it has touched real hardware
+yet** — this is the thing to check next, see the test checklist below.
 
 ## Where things stand right now
 
