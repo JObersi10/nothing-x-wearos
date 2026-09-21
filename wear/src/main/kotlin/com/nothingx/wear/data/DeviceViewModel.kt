@@ -29,6 +29,14 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private val _bondedDevices = MutableStateFlow<List<BondedDevice>>(emptyList())
     val bondedDevices: StateFlow<List<BondedDevice>> = _bondedDevices.asStateFlow()
 
+    // Tracks which device this session is connected to, so connect() calls
+    // from screens that re-enter composition (e.g. navigating back from
+    // Settings to the detail screen) don't tear down and restart a perfectly
+    // good connection — that was the actual bug behind "find my earbuds/ear
+    // fit test/low lag mode don't work": the connection was being closed the
+    // moment the user left the detail screen for Settings, before this fix.
+    private var connectedAddress: String? = null
+
     init {
         // Cache every state update so the Tile (which can't hold a live RFCOMM
         // connection) has a last-known snapshot to show. See NothingXTileService.
@@ -42,6 +50,8 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun connect(address: String, name: String) {
+        if (connectedAddress == address) return
+        connectedAddress = address
         viewModelScope.launch {
             transport.connect(address)
             prefs.setLastDevice(address, name)
@@ -49,6 +59,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun disconnect() {
+        connectedAddress = null
         viewModelScope.launch { transport.disconnect() }
     }
 
@@ -83,4 +94,13 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     fun launchEarFitTest() {
         viewModelScope.launch { transport.launchEarFitTest() }
     }
+
+    // No onCleared() cleanup here on purpose: viewModelScope is already
+    // cancelled by the time onCleared() runs (Android cancels it before
+    // invoking onCleared()), so a viewModelScope.launch { transport.disconnect() }
+    // there would silently do nothing — tried it, reverted it rather than ship
+    // a comment claiming cleanup that doesn't actually happen. The RFCOMM
+    // socket leaking if the user exits without passing back through
+    // DeviceListScreen (which is where disconnect() actually fires) is a real,
+    // known gap — see HANDOFF.md.
 }

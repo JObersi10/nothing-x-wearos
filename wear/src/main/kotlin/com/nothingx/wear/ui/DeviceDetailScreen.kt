@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -40,9 +40,14 @@ fun DeviceDetailScreen(
     val connectionState by viewModel.connectionState.collectAsState()
     val deviceState by viewModel.deviceState.collectAsState()
 
-    DisposableEffect(address) {
+    // Deliberately NOT disconnecting on dispose here: that was a real bug —
+    // navigating to Settings (a separate nav destination) disposed this
+    // composable and tore down the RFCOMM connection out from under it,
+    // silently dropping every settings command as "not connected". The
+    // connection now lives for the whole device session and is only closed
+    // when the user actually leaves it, from DeviceListScreen (see there).
+    LaunchedEffect(address) {
         viewModel.connect(address, deviceName)
-        onDispose { viewModel.disconnect() }
     }
 
     ScalingLazyColumn(

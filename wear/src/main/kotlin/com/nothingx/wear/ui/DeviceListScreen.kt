@@ -31,7 +31,14 @@ fun DeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedDevice
     // when a device's Bluetooth name doesn't match any known pattern.
     var showAll by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { viewModel.refreshBondedDevices() }
+    LaunchedEffect(Unit) {
+        viewModel.refreshBondedDevices()
+        // Being back at the device list is the real "left this device's
+        // session" signal — see DeviceDetailScreen's doc comment on why
+        // disconnect() lives here now, not tied to the detail screen's own
+        // composition lifecycle. A no-op if nothing was connected.
+        viewModel.disconnect()
+    }
 
     val supported = devices.filter { it.isSupported }
     val visible = if (showAll) devices else supported
