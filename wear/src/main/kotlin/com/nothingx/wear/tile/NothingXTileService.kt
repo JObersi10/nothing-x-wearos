@@ -4,6 +4,7 @@ import androidx.wear.protolayout.ActionBuilders
 import androidx.wear.protolayout.ColorBuilders.argb
 import androidx.wear.protolayout.DimensionBuilders.dp
 import androidx.wear.protolayout.DimensionBuilders.expand
+import androidx.wear.protolayout.DimensionBuilders.sp
 import androidx.wear.protolayout.LayoutElementBuilders
 import androidx.wear.protolayout.LayoutElementBuilders.Box
 import androidx.wear.protolayout.LayoutElementBuilders.Column
@@ -26,6 +27,9 @@ import com.nothingx.protocol.AncMode
 import com.nothingx.wear.MainActivity
 import com.nothingx.wear.data.DevicePrefs
 import com.nothingx.wear.data.LastKnownDeviceState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.guava.future
 
@@ -50,9 +54,16 @@ private const val NOTHING_DIM = 0xFF8A8A8A.toInt()
 class NothingXTileService : TileService() {
     private val prefs by lazy { DevicePrefs(applicationContext) }
 
+    // TileService in androidx.wear.tiles 1.4.0 does not expose a ready-made
+    // coroutine scope (an earlier version of this file assumed a `serviceScope`
+    // field that doesn't exist here — caught by CI, not guessed correctly the
+    // first time). Owning one directly is the safe, version-independent way to
+    // bridge onTileRequest's ListenableFuture return to suspending DataStore reads.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onTileRequest(
         requestParams: RequestBuilders.TileRequest,
-    ): ListenableFuture<TileBuilders.Tile> = serviceScope.future {
+    ): ListenableFuture<TileBuilders.Tile> = scope.future {
         val state = prefs.lastKnownState.first()
 
         TileBuilders.Tile.Builder()
@@ -117,19 +128,19 @@ class NothingXTileService : TileService() {
                     .addContent(
                         Text.Builder()
                             .setText(state.name ?: "Nothing X")
-                            .setFontStyle(FontStyle.Builder().setSize(dp(15f)).setColor(argb(NOTHING_WHITE)).build())
+                            .setFontStyle(FontStyle.Builder().setSize(sp(15f)).setColor(argb(NOTHING_WHITE)).build())
                             .build(),
                     )
                     .addContent(
                         Text.Builder()
                             .setText(ancLabel(state.ancMode))
-                            .setFontStyle(FontStyle.Builder().setSize(dp(13f)).setColor(argb(NOTHING_RED)).build())
+                            .setFontStyle(FontStyle.Builder().setSize(sp(13f)).setColor(argb(NOTHING_RED)).build())
                             .build(),
                     )
                     .addContent(
                         Text.Builder()
                             .setText(batteryLine(state))
-                            .setFontStyle(FontStyle.Builder().setSize(dp(12f)).setColor(argb(NOTHING_DIM)).build())
+                            .setFontStyle(FontStyle.Builder().setSize(sp(12f)).setColor(argb(NOTHING_DIM)).build())
                             .build(),
                     )
                     .build(),
