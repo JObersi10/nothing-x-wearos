@@ -16,8 +16,21 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # ubuntu-latest already ships a working Android SDK (ANDROID_HOME, licenses
+      # pre-accepted). android-actions/setup-android@v3 was tried here first but
+      # fails outright: it requests the legacy "tools" package, which Google
+      # removed from the SDK repository, so `sdkmanager` exits 1 before doing
+      # anything useful. Relying on the runner's preinstalled SDK avoids that;
+      # this step just makes sure the exact platform/build-tools this project
+      # needs are present, since the preinstalled set can lag a fresh compileSdk.
+      - name: Ensure required SDK platform and build-tools
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name sdkmanager | sort -V | tail -1)
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
