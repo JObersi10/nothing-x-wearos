@@ -20,8 +20,9 @@ first, Wear OS 3+ generally. See `README.md` for user-facing setup,
   devices. `NothingDeviceMatcher` name-matches supported devices.
 - `wear/` — the actual Wear OS app. Compose UI (`ui/`), `DeviceViewModel`
   wiring the transport to Compose state, a Tile (`tile/NothingXTileService`).
-- `phone/` — **scaffold only, not functional.** Landing spot for a future
-  phone-relay fallback transport. Do not describe this as working.
+- `phone/` — phone-relay fallback transport. Implemented (`PhoneRelayService`
+  + `WearRelayTransport`, see "relay path implemented" below) but
+  **unverified on real hardware** — do not describe it as confirmed working.
 
 ## Build commands
 
