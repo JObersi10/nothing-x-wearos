@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exposes NothingXLog's file (app-internal filesDir, see NothingXLog.kt)
+     to the share sheet via FileProvider — nothing else in filesDir is
+     exposed, "files" here means exactly that root, matched by MainActivity's
+     exportLogs() passing the file object straight from NothingXLog.currentFile(). -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path name="logs" path="." />
+</paths>

@@ -1,0 +1,73 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- PhoneRelayService keeps the phone-side RFCOMM connection to the
+         earbuds alive while relay mode is on, so the watch can send it
+         commands over the Wearable Data Layer without a live socket of
+         its own. BLUETOOTH_CONNECT/SCAN already come from :bluetooth's
+         own manifest via merge. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:theme="@android:style/Theme.DeviceDefault">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- exported=true + this exact intent-filter is the documented,
+             required pattern for a WearableListenerService: Play Services
+             is what actually sends MESSAGE_RECEIVED, wearable-app-internal
+             and not something a third-party app can spoof usefully here
+             (there's no BIND permission for this action to declare). This
+             is what lets a CMD_CONNECT from the watch start this service
+             even when the phone app was never opened. -->
+        <service
+            android:name=".relay.PhoneRelayService"
+            android:exported="true"
+            android:foregroundServiceType="connectedDevice">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:scheme="wear"
+                    android:host="*"
+                    android:pathPrefix="/nothingx/cmd" />
+            </intent-filter>
+        </service>
+
+        <!-- Starts the relay automatically as soon as the phone's own
+             Bluetooth connects to a matched earbuds device — see
+             AutoRelayReceiver's doc comment for why this doesn't need
+             BOOT_COMPLETED or the app to already be running. -->
+        <receiver
+            android:name=".relay.AutoRelayReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Lets MainActivity.exportLogs() share NothingXLog's file via the
+             normal share sheet without exposing a raw file:// path (blocked
+             by StrictMode/FileUriExposedException on a targetSdk this high). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

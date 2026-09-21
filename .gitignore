@@ -1,0 +1,13 @@
+*.iml
+.gradle/
+build/
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+*.apk
+*.aab
+.DS_Store
+/GRADLE_USER_HOME_marker
+/logs/
