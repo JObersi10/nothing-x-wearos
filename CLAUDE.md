@@ -345,13 +345,53 @@ the earbuds go out of range while the service is running in the background
 — it'll sit disconnected until the app is reopened or the Tile is tapped
 again.
 
-### `phone/` module
+### `phone/` module — relay path implemented (2026-09-21)
 
-Scaffolded to prove the `:protocol`/`:bluetooth` dependency wiring works from
-a second Android app, nothing more. No Data Layer listener, no relay logic.
-Don't let a stale doc or commit message imply otherwise — check
-`phone/src/main/kotlin/com/nothingx/phone/MainActivity.kt`'s doc comment,
-which is the source of truth on what's there.
+No longer a scaffold. `PhoneRelayService` (phone-side foreground service,
+`connectedDevice` type) holds a real `DirectRfcommTransport` connection to
+the earbuds — the phone's own normal Classic Bluetooth pairing, same
+transport class the watch uses for direct connect, just running on the
+other device — and relays commands/state to and from the watch over the
+Wearable Data Layer API. `MainActivity` lists bonded matched devices
+(reusing `BondedDevices`/`NothingDeviceMatcher` from `:bluetooth`) and lets
+the user tap one to start relaying, or stop it.
+
+Wire format lives in `:bluetooth`'s `relay/RelayProtocol.kt`
+(`RelayPaths` + `RelayCodec`), shared by both sides since both already
+depend on `:bluetooth`:
+- **Commands** (watch → phone) go over `MessageClient`, fire-and-forget —
+  matching `DirectRfcommTransport.sendCommand`'s own no-ack semantics; the
+  real protocol ack, if any, comes back as a state push, not a Data Layer
+  response.
+- **State** (phone → watch) goes over `DataClient`, deliberately instead of
+  more messages: it holds a single "current value" per path and only
+  notifies listeners when that value actually changes, so an idle relay
+  connection costs nothing beyond the open Bluetooth socket itself — no
+  polling, no re-pushing unchanged state. This is the "optimizations are
+  key" requirement actually built in, not just claimed.
+
+Watch side: `WearRelayTransport` (`wear/.../connection/`) implements the
+same `EarbudsTransport` interface as `DirectRfcommTransport`, so nothing
+above it (`EarbudsConnectionHolder`, the UI, the Tile) needs to know which
+is active. Which one `EarbudsConnectionHolder.init()` constructs is decided
+by `TransportModePrefs` (plain synchronous `SharedPreferences`, not the
+DataStore-backed `DevicePrefs` — deliberately, since `init()` is called
+from several non-suspend entry points and a synchronous read avoids
+threading that). **Switching the toggle in Settings ("Use phone relay")
+takes effect on the next app/process start, not live** — there's no
+hot-swap of an already-collected `StateFlow` reference. Settings' toggle
+says this explicitly (toast on change) rather than silently doing nothing;
+don't try to make it a live switch without also solving the
+stale-StateFlow-reference problem that creates in `DeviceViewModel`.
+
+**Unverified**: none of this has touched real hardware. The whole relay
+path — phone-side connect, command relay both directions, state sync,
+notification lifecycle, the watch/phone Data Layer pairing itself — needs
+an on-device round with both apps installed on a watch+phone pair that are
+actually paired via the Wear OS companion app. `MainActivity`'s device
+picker is intentionally minimal (list + tap, no polling/rescanning beyond
+an explicit refresh button) — don't read that as feature-complete phone UX,
+it's the minimum needed to start/stop the relay service.
 
 ## Icons and branding
 

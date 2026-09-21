@@ -1,7 +1,30 @@
 # HANDOFF
 
-Last updated: 2026-09-21, toolchain-migration round (AGP 9.1.1 / Kotlin
-2.2.10 / compileSdk 37, in progress toward real Wear Widgets).
+Last updated: 2026-09-21, phone relay implementation round (on top of the
+CI-green toolchain migration below).
+
+## Phone relay is implemented (unverified on hardware)
+
+`phone/` is no longer a scaffold. Full architecture, wire format, and code
+locations are in CLAUDE.md's "`phone/` module — relay path implemented"
+section — short version: `PhoneRelayService` holds a real
+`DirectRfcommTransport` on the phone's own Bluetooth pairing to the
+earbuds, relays commands from the watch over `MessageClient`
+(fire-and-forget) and pushes state back over `DataClient` (only on actual
+change, no polling). Watch side is `WearRelayTransport`, a second
+`EarbudsTransport` implementation picked via a "Use phone relay" toggle in
+Settings (`TransportModePrefs` — takes effect on next app start, not live,
+see its doc comment for why). Direct connect (`DirectRfcommTransport`) is
+still the default; nothing about the existing direct path changed.
+
+**Completely unverified** — this has not touched a real device. Needs a
+watch+phone pair that are actually paired via the Wear OS companion app,
+both APKs installed, and a manual walk of: turn on relay on the watch,
+open the phone app, tap a device to start relaying, confirm ANC/settings
+commands from the watch actually reach the earbuds through the phone, and
+confirm state (battery, ANC mode) makes it back to the watch UI.
+
+## Where things stand right now (toolchain migration, CI green)
 
 ## Where things stand right now
 
@@ -81,8 +104,9 @@ normally do.
   Earbuds + Ear Tip Fit Test with toast feedback, and now an explicit
   Disconnect action. Tile: edge-to-edge card, icon badge, and the 3 ANC dots
   are now real tap targets that change ANC mode without opening the app.
-- **`phone` module**: scaffold only, explicitly not functional — the user
-  has asked for the real Data Layer relay build next, not started yet.
+- **`phone` module**: real relay implementation now (see the section above)
+  — `PhoneRelayService` + a minimal device-picker `MainActivity`. Unverified
+  on hardware.
 - CI (`.github/workflows/ci.yml`), MIT `LICENSE` + `THIRD_PARTY_NOTICES.md`.
 
 ## What's verified vs. not
@@ -145,14 +169,9 @@ Full crash context: `adb logcat -s NothingX:V AndroidRuntime:E`
    — not guaranteed to exist in a fresh session/container) — UX/interaction-
    pattern inspiration only, per the same never-reuse-their-actual-assets
    rule as the Nothing trademark guidance. Not started.
-5. **Phone relay** (`phone/` module) — user has explicitly asked for the
-   real build: Wear Data Layer `MessageClient`/`ChannelClient`, a
-   phone-side foreground service running the same `DirectRfcommTransport`
-   logic, wired as a second `EarbudsTransport` implementation. Battery
-   target: not a literal number, but built right — proper foreground
-   service scoping, no busy-polling, Doze-aware, only wake the radio when
-   there's something to send. User suggested surveying real open-source
-   Android BLE/relay apps on GitHub for patterns first. Not started.
+5. **Verify the phone relay on real hardware** — implemented (see above)
+   but completely untested against actual devices. This is now the higher
+   priority than Phase 2/3 until it's confirmed working or found broken.
 6. Reconnect-on-boot / retry logic for `EarbudsConnectionService` if the
    earbuds go out of range while it's running in the background — currently
    it just sits disconnected until the app or Tile is used again.
@@ -183,6 +202,8 @@ Full crash context: `adb logcat -s NothingX:V AndroidRuntime:E`
 ## Known limits
 
 - No SDP-based channel discovery, probe-list only.
-- `phone/` module is not functional yet.
+- Phone relay is implemented but unverified on real hardware (see above).
 - No model/SKU detection, so settings commands aren't gated per-device.
 - No reconnect/retry if the background connection drops.
+- Relay mode switch (Settings' "Use phone relay" toggle) needs an app
+  restart to take effect — not live.

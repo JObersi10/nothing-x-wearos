@@ -1,5 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- PhoneRelayService keeps the phone-side RFCOMM connection to the
+         earbuds alive while relay mode is on, so the watch can send it
+         commands over the Wearable Data Layer without a live socket of
+         its own. BLUETOOTH_CONNECT/SCAN already come from :bluetooth's
+         own manifest via merge. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
@@ -13,6 +22,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".relay.PhoneRelayService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
     </application>
 

@@ -43,4 +43,8 @@ dependencies {
     implementation(project(":protocol"))
     implementation(project(":bluetooth"))
     implementation("com.google.android.gms:play-services-wearable:18.2.0")
+    // PhoneRelayService's CoroutineScope/launch — :bluetooth already depends
+    // on this but as `implementation`, so it isn't visible here transitively.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("androidx.core:core-ktx:1.13.1")
 }

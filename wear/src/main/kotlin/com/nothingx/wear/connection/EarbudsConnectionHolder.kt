@@ -41,8 +41,15 @@ object EarbudsConnectionHolder {
 
     fun init(context: Context) {
         if (transport != null) return
-        appContext = context.applicationContext
-        transport = DirectRfcommTransport(context.applicationContext)
+        val ctx = context.applicationContext
+        appContext = ctx
+        // Mode picked once per process, synchronously — see
+        // TransportModePrefs' doc comment for why this isn't a live toggle.
+        transport = if (TransportModePrefs.useRelay(ctx)) {
+            WearRelayTransport(ctx)
+        } else {
+            DirectRfcommTransport(ctx)
+        }
     }
 
     private var connectedAddress: String? = null

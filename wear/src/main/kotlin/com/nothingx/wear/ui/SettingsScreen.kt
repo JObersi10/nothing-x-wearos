@@ -8,6 +8,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -24,6 +27,7 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.ToggleChip
 import androidx.wear.compose.material.ToggleChipDefaults
 import com.nothingx.protocol.EarFitTestResult
+import com.nothingx.wear.connection.TransportModePrefs
 import com.nothingx.wear.data.DeviceViewModel
 
 private const val MAX_BASS_LEVEL = 5
@@ -184,6 +188,30 @@ fun SettingsScreen(viewModel: DeviceViewModel) {
                 // app) — this is the explicit way to stop that and save
                 // battery, not an automatic side effect of navigation anymore.
                 colors = ChipDefaults.chipColors(backgroundColor = MaterialTheme.colors.surface),
+            )
+        }
+
+        item { ListHeader { Text("Advanced") } }
+
+        item {
+            var useRelay by remember { mutableStateOf(TransportModePrefs.useRelay(context)) }
+            ToggleChip(
+                checked = useRelay,
+                onCheckedChange = {
+                    useRelay = it
+                    TransportModePrefs.setUseRelay(context, it)
+                    Toast.makeText(
+                        context,
+                        "Reopen the app for this to take effect (disconnect first if connected)",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                },
+                label = { Text("Use phone relay") },
+                secondaryLabel = {
+                    Text("Route through the Nothing X phone app instead of connecting directly")
+                },
+                toggleControl = { Switch(checked = useRelay) },
+                colors = ToggleChipDefaults.toggleChipColors(),
             )
         }
     }

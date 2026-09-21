@@ -31,5 +31,10 @@ dependencies {
     implementation(project(":protocol"))
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    // For RelayProtocol.kt's DataMap-based wire format shared by the watch
+    // (WearRelayTransport) and phone (PhoneRelayService) sides of the relay
+    // path — both already depend on :bluetooth, so the shared codec lives
+    // here rather than being duplicated in each.
+    implementation("com.google.android.gms:play-services-wearable:18.2.0")
     testImplementation(kotlin("test"))
 }
