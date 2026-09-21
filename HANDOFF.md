@@ -74,14 +74,19 @@ round" and "`phone/` module — rewritten for real automatic use" sections.
 
 ## APK downloads
 
-Will be updated once this round's CI run is confirmed green — check the PR
-(link above) for the latest run on `claude/ecstatic-galileo-evyo4w` if this
-line hasn't been refreshed yet.
+**Confirmed-green run** (commit `2f41740`, this round's full bug-fix pass +
+phone relay rewrite):
+https://github.com/JObersi10/nothing-x-wearos/actions/runs/35591724120
+
+Direct artifact links (same run):
+- wear-debug-apk: https://github.com/JObersi10/nothing-x-wearos/actions/runs/35591724120/artifacts/10635171025
+- phone-debug-apk: https://github.com/JObersi10/nothing-x-wearos/actions/runs/35591724120/artifacts/10634444807
 
 GitHub artifact downloads need you logged into GitHub in the browser (the
-API zip URLs need an auth token) — open the run page and download from
-there. Install via `adb install -r wear-debug.apk` after unzipping (same
-for `phone-debug.apk`), or sideload however you normally do.
+API zip URLs need an auth token) — open the run page (or the links above)
+and download from there. Artifacts expire ~90 days after the run
+(2026-12-20). Install via `adb install -r wear-debug.apk` after unzipping
+(same for `phone-debug.apk`), or sideload however you normally do.
 
 ## What's done
 
