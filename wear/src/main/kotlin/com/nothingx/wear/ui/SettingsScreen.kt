@@ -171,6 +171,21 @@ fun SettingsScreen(viewModel: DeviceViewModel) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+
+        item {
+            Chip(
+                onClick = {
+                    viewModel.disconnect()
+                    Toast.makeText(context, "Disconnected", Toast.LENGTH_SHORT).show()
+                },
+                label = { Text("Disconnect") },
+                // The connection is now kept alive in the background on
+                // purpose (so the Tile can control ANC without opening the
+                // app) — this is the explicit way to stop that and save
+                // battery, not an automatic side effect of navigation anymore.
+                colors = ChipDefaults.chipColors(backgroundColor = MaterialTheme.colors.surface),
+            )
+        }
     }
 }
 

@@ -24,12 +24,17 @@ import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 
-private val REQUIRED_PERMISSIONS = arrayOf(
-    Manifest.permission.BLUETOOTH_CONNECT,
-    Manifest.permission.BLUETOOTH_SCAN,
-)
+private val REQUIRED_PERMISSIONS = buildList {
+    add(Manifest.permission.BLUETOOTH_CONNECT)
+    add(Manifest.permission.BLUETOOTH_SCAN)
+    // POST_NOTIFICATIONS is a real runtime permission from API 33+ (needed
+    // for EarbudsConnectionService's persistent notification); requesting it
+    // on older APIs is a harmless no-op since it didn't exist as a runtime
+    // grant before then.
+    add(Manifest.permission.POST_NOTIFICATIONS)
+}.toTypedArray()
 
-/** Blocks [content] behind a runtime permission request for BLUETOOTH_CONNECT/SCAN. */
+/** Blocks [content] behind a runtime permission request (Bluetooth + notifications). */
 @Composable
 fun PermissionGate(content: @Composable () -> Unit) {
     val context = LocalContext.current

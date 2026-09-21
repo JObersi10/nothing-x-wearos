@@ -2,4 +2,15 @@
     <style name="AppTheme" parent="android:Theme.DeviceDefault">
         <item name="android:colorBackground">@color/nothing_black</item>
     </style>
+
+    <!-- TileActionActivity's theme: fully invisible, no animation, so a Tile
+         tap that launches it (to act on the connection without the app UI)
+         never actually shows anything on screen. -->
+    <style name="Theme.Transparent" parent="android:Theme.DeviceDefault">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowDisablePreview">true</item>
+    </style>
 </resources>

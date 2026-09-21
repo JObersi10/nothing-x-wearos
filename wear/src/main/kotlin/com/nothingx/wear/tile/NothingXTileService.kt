@@ -27,9 +27,12 @@ import androidx.wear.tiles.TileBuilders
 import androidx.wear.tiles.TileService
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.nothingx.bluetooth.ConnectionState
 import com.nothingx.protocol.AncMode
 import com.nothingx.wear.MainActivity
 import com.nothingx.wear.R
+import com.nothingx.wear.connection.EarbudsConnectionHolder
+import com.nothingx.wear.connection.TileActionActivity
 import com.nothingx.wear.data.DevicePrefs
 import com.nothingx.wear.data.LastKnownDeviceState
 import kotlinx.coroutines.CoroutineScope
@@ -58,13 +61,14 @@ private const val NOTHING_DIM = 0xFF8A8A8A.toInt()
  * filter) — "protolayout" vs "tiles" here is a library-naming split, not an
  * old-vs-new API split.
  *
- * v1 is read-only — it shows the last-known battery/ANC state cached by
- * DeviceViewModel (see DevicePrefs.cacheState) and taps through to the app.
- * It does not poll the earbuds directly: a Tile can't hold a live RFCOMM
- * connection of its own. Quick in-tile ANC toggling (send a command without
- * opening the app) is a v2 item — it needs either a bound background service
- * holding the RFCOMM connection, or the phone-relay transport, wired up to a
- * Tile action.
+ * The 3 ANC dots are now real tap targets (each its own Clickable ->
+ * TileActionActivity with a target mode), not just a read-only indicator —
+ * see TileActionActivity's doc comment for the in-tile-control mechanism and
+ * why it's a trampoline activity rather than ProtoLayout's native
+ * LoadAction+state pattern. State prefers EarbudsConnectionHolder's live
+ * StateFlow when the app process already has a connection (same process as
+ * this TileService); falls back to DevicePrefs' cached snapshot otherwise
+ * (e.g. right after a reboot, before anything reconnected).
  */
 class NothingXTileService : TileService() {
     private val prefs by lazy { DevicePrefs(applicationContext) }
@@ -79,7 +83,7 @@ class NothingXTileService : TileService() {
     override fun onTileRequest(
         requestParams: RequestBuilders.TileRequest,
     ): ListenableFuture<TileBuilders.Tile> = scope.future {
-        val state = prefs.lastKnownState.first()
+        val state = currentState()
 
         TileBuilders.Tile.Builder()
             .setResourcesVersion(RESOURCES_VERSION)
@@ -97,6 +101,25 @@ class NothingXTileService : TileService() {
                     .build(),
             )
             .build()
+    }
+
+    /** Prefers the live in-process connection's state over the cached DataStore snapshot. */
+    private suspend fun currentState(): LastKnownDeviceState {
+        val cached = prefs.lastKnownState.first()
+        EarbudsConnectionHolder.init(applicationContext)
+        val live = EarbudsConnectionHolder.deviceState?.value
+        val connected = EarbudsConnectionHolder.connectionState?.value is ConnectionState.Connected
+        return if (connected && live != null) {
+            LastKnownDeviceState(
+                name = cached.name,
+                leftBattery = live.leftBattery,
+                rightBattery = live.rightBattery,
+                caseBattery = live.caseBattery,
+                ancMode = live.ancMode,
+            )
+        } else {
+            cached
+        }
     }
 
     override fun onTileResourcesRequest(
@@ -203,7 +226,9 @@ class NothingXTileService : TileService() {
 
         // Full-bleed rounded card filling the whole tile — the "One UI 8" style
         // edge-to-edge look, rather than a small centered widget with visible
-        // system chrome around it.
+        // system chrome around it. Tapping the card outside the ANC dots still
+        // opens the app; the dots themselves have their own click targets
+        // (added in ancModeDots) that take priority over this one.
         val card = Box.Builder()
             .setWidth(expand())
             .setHeight(expand())
@@ -239,26 +264,52 @@ class NothingXTileService : TileService() {
             .build()
     }
 
-    // Small 3-dot segmented indicator (off / ANC / transparency, active one
-    // filled red) — a compact echo of the reference pill selector's segmented
-    // control, without needing per-segment tap targets or new icon resources
-    // since the Tile is read-only for now (see the class doc).
+    // 3 real tap targets now (off / ANC / transparency), not just a
+    // read-only indicator — each dot launches TileActionActivity (an
+    // invisible trampoline, see its doc comment) with the target mode, which
+    // calls straight into EarbudsConnectionHolder. Bigger than the visual
+    // dot itself so it's actually hittable at watch-tap scale; the dot
+    // graphic stays small so the row still reads as a compact indicator.
     private fun ancModeDots(current: AncMode): LayoutElementBuilders.LayoutElement {
         val builder = Row.Builder()
         AncMode.entries.forEachIndexed { index, mode ->
             if (index > 0) {
                 builder.addContent(Box.Builder().setWidth(dp(5f)).setHeight(dp(1f)).build())
             }
+            val clickable = Clickable.Builder()
+                .setId("anc_${mode.name}")
+                .setOnClick(
+                    ActionBuilders.LaunchAction.Builder()
+                        .setAndroidActivity(
+                            ActionBuilders.AndroidActivity.Builder()
+                                .setClassName(TileActionActivity::class.java.name)
+                                .setPackageName(packageName)
+                                .addKeyToExtraMapping(
+                                    TileActionActivity.EXTRA_ANC_MODE,
+                                    ActionBuilders.AndroidStringExtra.Builder().setValue(mode.name).build(),
+                                )
+                                .build(),
+                        )
+                        .build(),
+                )
+                .build()
             builder.addContent(
                 Box.Builder()
-                    .setWidth(dp(7f))
-                    .setHeight(dp(7f))
-                    .setModifiers(
-                        Modifiers.Builder()
-                            .setBackground(
-                                Background.Builder()
-                                    .setColor(argb(if (mode == current) NOTHING_RED else NOTHING_DIM))
-                                    .setCorner(Corner.Builder().setRadius(dp(4f)).build())
+                    .setWidth(dp(18f))
+                    .setHeight(dp(18f))
+                    .setModifiers(Modifiers.Builder().setClickable(clickable).build())
+                    .addContent(
+                        Box.Builder()
+                            .setWidth(dp(7f))
+                            .setHeight(dp(7f))
+                            .setModifiers(
+                                Modifiers.Builder()
+                                    .setBackground(
+                                        Background.Builder()
+                                            .setColor(argb(if (mode == current) NOTHING_RED else NOTHING_DIM))
+                                            .setCorner(Corner.Builder().setRadius(dp(4f)).build())
+                                            .build(),
+                                    )
                                     .build(),
                             )
                             .build(),

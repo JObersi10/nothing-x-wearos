@@ -1,90 +1,89 @@
 # HANDOFF
 
-Last updated: 2026-09-21, first build session + first real-hardware round.
+Last updated: 2026-09-21, persistent-connection + in-tile-control round.
 
 ## What's done
 
-- **`protocol` module**: frame codec, CRC16/ARC, command IDs (battery/ANC/EQ/
-  activation/wear-status/firmware/serial), `EarbudsSession` state machine.
-  **Built and unit-tested for real** — 17 tests, all passing.
-- **`bluetooth` module**: `DirectRfcommTransport` (watch-direct RFCOMM
-  connection, channel probe, recv loop, command send — now with `Log.d/i/w/e`
-  under tag `NothingX` throughout, see "Debugging on device" below),
-  `BondedDevices`, `NothingDeviceMatcher`.
-- **`wear` module**: Compose app — device list (now filters to
-  Nothing/CMF-matched devices by default, with a "show all paired devices"
-  fallback chip), device detail screen (ANC selector, battery text; EQ UI
-  removed for now, not a priority — the protocol plumbing is still there), a
-  Tile (`NothingXTileService`) styled as an edge-to-edge rounded card with an
-  icon badge and a 3-dot ANC mode indicator.
-- **`phone` module**: scaffold only, explicitly not functional.
+- **`protocol` module**: frame codec, CRC16/ARC, command IDs, `EarbudsSession`
+  state machine. **Built and unit-tested for real** — 24 tests, all passing.
+- **`bluetooth` module**: `DirectRfcommTransport` with `Log.d/i/w/e` under
+  tag `NothingX` (gated behind `Log.isLoggable` on the hot RX/TX path — see
+  "Debugging on device" below), `BondedDevices`, `NothingDeviceMatcher`.
+- **`wear` module**: Compose app, now with a **persistent background
+  connection** shared between the app and the Tile — see CLAUDE.md's "Tile
+  now controls ANC without opening the app" section for the full
+  architecture (`EarbudsConnectionHolder` singleton, `EarbudsConnectionService`
+  foreground service, `TileActionActivity` trampoline). Device list filters
+  to matched devices, no longer disconnects on navigation (that was removed
+  — it conflicted with the persistent connection). Device detail: battery
+  card first (icon replaced with letter badges L/C/R, not custom art),
+  ANC card below, Settings chip. Settings screen: in-ear detection, low
+  latency, personalized ANC, Ultra Bass with an 0-5 `InlineSlider`, Find My
+  Earbuds + Ear Tip Fit Test with toast feedback, and now an explicit
+  Disconnect action. Tile: edge-to-edge card, icon badge, and the 3 ANC dots
+  are now real tap targets that change ANC mode without opening the app.
+- **`phone` module**: scaffold only, explicitly not functional — the user
+  has asked for the real Data Layer relay build next, not started yet.
 - CI (`.github/workflows/ci.yml`), MIT `LICENSE` + `THIRD_PARTY_NOTICES.md`.
 
 ## What's verified vs. not
 
 **Confirmed on real hardware (Galaxy Watch 4 + CMF Buds Pro 2, 2026-09-21):**
-- `DirectRfcommTransport`'s reflection-based RFCOMM channel connect works on
-  Wear OS 3. This was the single biggest open architectural risk and it's
-  resolved — the direct-connect design is viable, not just theoretical.
-- ANC mode switching (off / ANC / transparency) round-trips correctly over
-  this connection on a CMF Buds Pro 2.
-- CI is fully green: `protocol`, `bluetooth`, `wear`, and `phone` all build
-  against the real Android SDK (GitHub Actions), not just this sandbox's
-  best-effort read of API surfaces.
+- Direct RFCOMM connect and ANC mode switching (off/ANC/transparency) work.
+- CI is fully green through the settings-screen + Ultra Bass slider round.
 
-**Still unconfirmed:**
-- Battery and EQ round-trip on CMF specifically (user has only reported on
-  ANC so far).
-- Whether the channel-probe list and activation handshake work the same way
-  on other Nothing/CMF models, or other watches.
-- CMF Buds command IDs beyond what's now confirmed working (ANC) — battery/
-  EQ/wear-status on CMF still ride on the "probably same as Nothing, unverified"
-  assumption from something-x/ear-web.
+**NOT yet verified — built after the last device round, before any
+retest:**
+- The entire persistent-connection + in-tile-control architecture
+  (`EarbudsConnectionHolder`, `EarbudsConnectionService`,
+  `TileActionActivity`, the Tile's per-dot click targets). CI can confirm it
+  compiles; it cannot confirm the foreground service actually keeps the
+  process alive in the background, that the notification shows (needs
+  `POST_NOTIFICATIONS` grant — now requested via `PermissionGate`), that
+  tapping a Tile dot actually changes ANC with the app closed, or that
+  `ActionBuilders.AndroidActivity.addKeyToExtraMapping()` (used to pass the
+  target mode to the trampoline activity) is the right API — first use of
+  that specific call in this project.
+- Battery and EQ round-trip on CMF specifically (user has only confirmed ANC).
+- Settings screen toggles (in-ear detection, low latency, personalized ANC,
+  Ultra Bass) — wired and compiles, not yet confirmed round-tripping on
+  real hardware.
 
 ## Debugging on device
 
-`DirectRfcommTransport` logs everything (channel probe attempts, TX/RX frame
-bytes, connection state) under tag `NothingX`. To watch it live:
-
 ```bash
-adb logcat -c                # clear old logs first
-adb logcat -s NothingX:V      # follow only this app's protocol logs
+adb logcat -c
+adb logcat -s NothingX:V      # DirectRfcommTransport's protocol logs
 ```
 
-If you need full context around a crash (not just the protocol logs):
-
-```bash
-adb logcat -s NothingX:V AndroidRuntime:E
-```
+Full crash context: `adb logcat -s NothingX:V AndroidRuntime:E`
 
 ## Next steps, in order
 
-1. ~~Build it, confirm direct RFCOMM connect works on real hardware~~ — done.
-2. ~~Add the settings screen (in-ear detection, low latency, personalized
-   ANC, bass enhance, find-my-earbuds, ear fit test, gesture count)~~ — done
-   this round, real mined commands (see CLAUDE.md), **not yet built/run**.
-3. ~~Build and verify this round's changes~~ — CI confirms `SettingsScreen.kt`
-   (including `ToggleChip`, used for the first time here) compiles clean.
-   Still needs an actual on-device test of the new settings toggles — CI
-   only proves it compiles, not that in-ear detection/low latency/
-   personalized ANC/bass enhance round-trip correctly on real hardware.
-4. Confirm the newly-wired settings actually round-trip on CMF Buds Pro 2 —
-   only ANC has been confirmed on real hardware so far; battery/EQ/settings
-   are all still unconfirmed on CMF specifically.
-5. Gesture *editing* (not just the read-only count) — the per-gesture array
-   structure (`gestureDevice`/`gestureCommon`/`gestureType`/`gestureAction`)
-   needs real UI design, deferred from this pass.
-6. Custom EQ, CMF's separate Listening Mode command — see CLAUDE.md.
-7. Tile is still read-only (no live RFCOMM connection of its own) — v2 item
-   is either a bound background service or the phone-relay transport wired
-   to a Tile action for in-tile quick toggling.
+1. **Build and retest on device.** This round touched connection lifecycle,
+   the Tile, and the manifest (new service + activity + permissions) — a
+   lot of surface area since the last confirmed-working build. Confirm:
+   normal app use still works (connect, ANC, settings), the foreground
+   service notification appears, and a Tile tap actually changes ANC with
+   the app fully closed.
+2. **Phone relay** (`phone/` module) — user has explicitly asked for the
+   real build now: Wear Data Layer `MessageClient`/`ChannelClient`, a
+   phone-side foreground service running the same `DirectRfcommTransport`
+   logic, wired as a second `EarbudsTransport` implementation. Battery
+   target: not a literal number, but built right — proper foreground
+   service scoping, no busy-polling, Doze-aware, only wake the radio when
+   there's something to send. Worth surveying a couple of real open-source
+   Android BLE/Bluetooth relay or companion apps on GitHub first for
+   established patterns (not started yet).
+3. Reconnect-on-boot / retry logic for `EarbudsConnectionService` if the
+   earbuds go out of range while it's running in the background — currently
+   it just sits disconnected until the app or Tile is used again.
+4. Gesture *editing*, custom EQ, CMF's separate Listening Mode command — see
+   CLAUDE.md, all still deferred from earlier passes.
 
 ## Known limits
 
-- Tile has no live connection, no in-tile quick actions yet.
 - No SDP-based channel discovery, probe-list only.
-- `phone/` module is not functional — see its `MainActivity` doc comment.
-- No model/SKU detection, so settings commands aren't gated per-device the
-  way ear-web gates them (e.g. personalized ANC is Ear (2)-only in the
-  official app) — sending an unsupported command is assumed harmless but
-  that's inherited from the source material, not separately verified.
+- `phone/` module is not functional yet.
+- No model/SKU detection, so settings commands aren't gated per-device.
+- No reconnect/retry if the background connection drops.

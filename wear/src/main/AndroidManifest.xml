@@ -2,6 +2,12 @@
 
     <uses-feature android:name="android.hardware.type.watch" />
 
+    <!-- EarbudsConnectionService keeps the RFCOMM connection alive in the
+         background so the Tile can send commands without opening the app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -26,6 +32,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".connection.TileActionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.Transparent" />
+
+        <service
+            android:name=".connection.EarbudsConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <service
             android:name=".tile.NothingXTileService"

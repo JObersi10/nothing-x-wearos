@@ -195,13 +195,56 @@ actually check it renders acceptably (a screenshot from the user, or a
 local Compose preview) before shipping it, not just "the path data looks
 plausible."
 
-### Tile is read-only, not live
+### Tile now controls ANC without opening the app (2026-09-21)
 
-`NothingXTileService` reads cached state from `DevicePrefs` (written by
-`DeviceViewModel` every time `deviceState` changes while the app is open) —
-it does not hold its own RFCOMM connection. Tapping it opens the app; there's
-no in-tile quick-toggle yet. That needs either a bound background service
-holding the connection, or the (currently unimplemented) phone relay.
+This replaced the earlier "Tile is read-only" design. The connection is now
+process-wide and persistent, not owned by any one screen or ViewModel:
+
+- **`EarbudsConnectionHolder`** (`wear/.../connection/`) — a singleton
+  object holding the one live `EarbudsTransport`. Both `MainActivity` (via
+  `DeviceViewModel`, now a thin wrapper) and `NothingXTileService` read/act
+  on this same instance, since a Tile provider and the app's Activity are
+  the same process on Wear OS (no separate `android:process` declared) —
+  no cross-process IPC needed, just a plain singleton.
+- **`EarbudsConnectionService`** — a foreground service (`connectedDevice`
+  type) whose only job is keeping the process alive in the background so
+  the connection survives after the user leaves the app. Started from
+  `DeviceViewModel.connect()`, stopped only by the explicit "Disconnect"
+  chip in `SettingsScreen` — **not** by navigating within the app anymore
+  (see the trap below).
+- **`TileActionActivity`** — an invisible trampoline activity
+  (`Theme.Transparent`, `excludeFromRecents`, `noHistory`) that the Tile's
+  ANC dots launch with a target mode extra; it calls
+  `EarbudsConnectionHolder.setAncMode()` and finishes before any frame
+  draws, so nothing visible happens. Deliberately used instead of
+  ProtoLayout's native `LoadAction`+state round-trip (the "correct" way to
+  build an interactive Tile) — that pattern needs several ProtoLayout APIs
+  this project had never exercised, in a sandbox that can't compile-check
+  any of it. The trampoline reuses only `ActionBuilders.LaunchAction`,
+  which the Tile already used successfully to open `MainActivity`. Lower
+  risk; the user can't tell the difference in practice.
+
+**Trap: don't reintroduce a disconnect tied to navigation.** An earlier fix
+this same session had `DeviceListScreen` call `disconnect()` every time the
+user returned to it, to fix a different bug (connection dying when
+navigating to Settings). That directly conflicts with the persistent Tile
+connection — it would kill the Tile's connection on every trip back to the
+list. Removed; disconnecting is now only ever explicit (Settings' Disconnect
+chip) or automatic process death. If a "leave this device" signal is needed
+again, do **not** put it on `DeviceListScreen`'s composition lifecycle.
+
+**Unverified**: none of this has touched a real device yet (built after the
+last field-test round). Specific risks: `ActionBuilders.AndroidActivity
+.addKeyToExtraMapping()` with `AndroidStringExtra` for passing the target
+ANC mode to the trampoline activity is a ProtoLayout API surface this
+project hasn't exercised before; the foreground service's
+`connectedDevice` type and `POST_NOTIFICATIONS` runtime permission
+(requested via `PermissionGate`) need on-device confirmation that the
+notification actually shows and the service actually survives backgrounding
+long enough to matter; and there's no reconnect-on-boot or retry logic if
+the earbuds go out of range while the service is running in the background
+— it'll sit disconnected until the app is reopened or the Tile is tapped
+again.
 
 ### `phone/` module
 

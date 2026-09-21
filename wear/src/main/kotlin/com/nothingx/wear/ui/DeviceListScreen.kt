@@ -31,13 +31,15 @@ fun DeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedDevice
     // when a device's Bluetooth name doesn't match any known pattern.
     var showAll by remember { mutableStateOf(false) }
 
+    // Deliberately does NOT disconnect on returning here anymore. It used to
+    // (navigating back to the list was treated as "left this device"), but
+    // that directly fought the persistent background connection the Tile
+    // needs to control ANC without opening the app — every trip back to
+    // this screen would have killed it. The connection is now
+    // intentionally long-lived; see EarbudsConnectionHolder's doc comment.
+    // Explicit disconnect lives in SettingsScreen instead.
     LaunchedEffect(Unit) {
         viewModel.refreshBondedDevices()
-        // Being back at the device list is the real "left this device's
-        // session" signal — see DeviceDetailScreen's doc comment on why
-        // disconnect() lives here now, not tied to the detail screen's own
-        // composition lifecycle. A no-op if nothing was connected.
-        viewModel.disconnect()
     }
 
     val supported = devices.filter { it.isSupported }
