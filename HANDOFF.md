@@ -63,13 +63,11 @@ adb logcat -s NothingX:V AndroidRuntime:E
 2. ~~Add the settings screen (in-ear detection, low latency, personalized
    ANC, bass enhance, find-my-earbuds, ear fit test, gesture count)~~ — done
    this round, real mined commands (see CLAUDE.md), **not yet built/run**.
-3. **Build and verify this round's changes on device.** New risk this time:
-   `SettingsScreen.kt` uses Wear Compose Material's `ToggleChip` for the
-   first time in this project — every other Compose widget used so far
-   (`Chip`, `ListHeader`, `ScalingLazyColumn`) has been through a real CI
-   build, `ToggleChip`'s exact parameter shape (`secondaryLabel` position,
-   `toggleControl` requirement) has not. Expect this to be the next thing
-   that needs a fix cycle, same as the Tile did.
+3. ~~Build and verify this round's changes~~ — CI confirms `SettingsScreen.kt`
+   (including `ToggleChip`, used for the first time here) compiles clean.
+   Still needs an actual on-device test of the new settings toggles — CI
+   only proves it compiles, not that in-ear detection/low latency/
+   personalized ANC/bass enhance round-trip correctly on real hardware.
 4. Confirm the newly-wired settings actually round-trip on CMF Buds Pro 2 —
    only ANC has been confirmed on real hardware so far; battery/EQ/settings
    are all still unconfirmed on CMF specifically.
