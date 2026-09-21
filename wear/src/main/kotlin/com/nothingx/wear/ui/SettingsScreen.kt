@@ -114,6 +114,8 @@ fun SettingsScreen(viewModel: DeviceViewModel) {
                     value = deviceState.bassLevel ?: 2,
                     onValueChange = { viewModel.setBassEnhance(true, it) },
                     valueProgression = 0..MAX_BASS_LEVEL,
+                    decreaseIcon = { Text("−") },
+                    increaseIcon = { Text("+") },
                 )
             }
         }
