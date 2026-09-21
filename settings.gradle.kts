@@ -15,7 +15,10 @@ pluginManagement {
         id("com.android.library") version "8.5.2"
         id("org.jetbrains.kotlin.android") version "1.9.24"
         id("org.jetbrains.kotlin.jvm") version "1.9.24"
-        id("org.jetbrains.kotlin.plugin.compose") version "1.9.24"
+        // No org.jetbrains.kotlin.plugin.compose here: that standalone Compose
+        // compiler plugin only exists from Kotlin 2.0+. On 1.9.24 (what this
+        // project uses), the Compose compiler version is set via `composeOptions`
+        // in the Android block instead — see wear/build.gradle.kts.
     }
 }
 

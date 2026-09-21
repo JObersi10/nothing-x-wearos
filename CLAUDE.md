@@ -114,6 +114,18 @@ unmined into `Commands.kt` for v1. When picking that up, `ear-web/res/js/
 bluetooth_socket.js` and `control.js` are the source to mine — see
 `THIRD_PARTY_NOTICES.md`.
 
+### Compose compiler version, not a Gradle plugin
+
+`wear`'s Compose UI needs a Compose *compiler* version matched to the Kotlin
+version. On Kotlin 2.0+ that's the `org.jetbrains.kotlin.plugin.compose`
+Gradle plugin. This project is pinned to Kotlin 1.9.24 (see the toolchain
+note above), where that plugin doesn't exist at all — CI's first real build
+of `wear` failed on exactly this ("Plugin ... was not found"). On 1.9.24 the
+compiler version is set via `composeOptions { kotlinCompilerExtensionVersion
+= "1.5.14" }` in `wear/build.gradle.kts`'s `android {}` block instead. If
+Kotlin ever gets bumped to 2.0+, switch to the plugin and drop
+`composeOptions` — don't run both.
+
 ### Tile is read-only, not live
 
 `NothingXTileService` reads cached state from `DevicePrefs` (written by

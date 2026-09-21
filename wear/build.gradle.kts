@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -18,6 +17,12 @@ android {
 
     buildFeatures {
         compose = true
+    }
+    composeOptions {
+        // Compose compiler version matched to Kotlin 1.9.24 per the Jetpack
+        // Compose-to-Kotlin compatibility map. Kotlin 2.0+ would use the
+        // org.jetbrains.kotlin.plugin.compose Gradle plugin instead of this.
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
 
     compileOptions {
