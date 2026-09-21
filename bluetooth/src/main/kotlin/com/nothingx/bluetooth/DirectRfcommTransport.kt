@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.nothingx.protocol.AncMode
 import com.nothingx.protocol.Commands
@@ -31,7 +32,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
+
+private const val TAG = "NothingX"
 
 /**
  * Watch-side direct RFCOMM connection to a Nothing/CMF earbuds device —
@@ -39,18 +41,14 @@ import kotlinx.coroutines.withTimeoutOrNull
  * something-x's `NothingDevice` (protocol.py) channel-probe + recv-loop
  * approach to Android's Bluetooth Classic APIs.
  *
- * UNVERIFIED, this is the central open risk of the whole direct-connect
- * design: Android's public [BluetoothDevice] API only exposes
- * `createRfcommSocketToServiceRecord(UUID)`, which does an SDP lookup by
- * service UUID — there is no public API to open RFCOMM on an arbitrary
- * channel number, which is what the Nothing protocol needs (no known SDP
- * UUID for it). This class uses the same private `createRfcommSocket(int)`
- * reflection call that every Android Bluetooth-SPP-terminal app on the Play
- * Store relies on for the same reason. It has worked across Android versions
- * for years but is not a stable contract — Google could break it, and on a
- * Wear OS build specifically nobody has confirmed it here. First real build
- * milestone: run this against your Galaxy Watch 4 and see if a socket opens
- * at all.
+ * Confirmed working on real hardware (2026-09-21): ANC mode switching over
+ * this exact code path against a CMF Buds Pro 2, direct-connected from a
+ * Galaxy Watch 4. The reflection-based RFCOMM channel connect (see
+ * `openRfcommChannel`) does work on Wear OS 3 — that was the open question
+ * this class's doc comment used to flag as unconfirmed.
+ *
+ * All logging in this class uses tag "$TAG" — `adb logcat -s $TAG:V` to
+ * follow a connection attempt live.
  */
 class DirectRfcommTransport(context: Context) : EarbudsTransport {
     private val appContext = context.applicationContext
@@ -75,7 +73,9 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
     @SuppressLint("MissingPermission")
     override suspend fun connect(address: String) {
         requirePermission()
+        Log.i(TAG, "connect() address=$address")
         val bluetoothAdapter = adapter ?: run {
+            Log.e(TAG, "connect: no BluetoothAdapter on this device")
             _connectionState.value = ConnectionState.Failed("No Bluetooth adapter on this device")
             return
         }
@@ -85,6 +85,7 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
             val device = try {
                 bluetoothAdapter.getRemoteDevice(address)
             } catch (e: IllegalArgumentException) {
+                Log.e(TAG, "connect: invalid address $address", e)
                 _connectionState.value = ConnectionState.Failed("Invalid address: $address")
                 return@launch
             }
@@ -93,17 +94,20 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
             for (channel in PROBE_CHANNELS) {
                 tried++
                 _connectionState.value = ConnectionState.Connecting(tried)
+                Log.d(TAG, "probing channel $channel ($tried/${PROBE_CHANNELS.size})")
                 val result = tryChannel(device, channel)
                 if (result != null) {
                     val (openSocket, initialBytes) = result
                     socket = openSocket
                     output = openSocket.outputStream
                     fsn = 0
+                    Log.i(TAG, "connected on channel $channel, initial=${initialBytes.toHexString()}")
                     _connectionState.value = ConnectionState.Connected
                     runReceiveLoop(openSocket.inputStream, initialBytes)
                     return@launch
                 }
             }
+            Log.w(TAG, "no channel responded after ${PROBE_CHANNELS.size} attempts")
             _connectionState.value = ConnectionState.Failed(
                 "No channel on $address responded to the Nothing protocol probe " +
                     "(tried ${PROBE_CHANNELS.size} channels). See DirectRfcommTransport's " +
@@ -117,12 +121,14 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
         val sock = try {
             openRfcommChannel(device, channel)
         } catch (e: Exception) {
+            Log.d(TAG, "channel $channel: createRfcommSocket reflection failed: ${e.message}")
             return null
         } ?: return null
 
         try {
             sock.connect()
         } catch (e: IOException) {
+            Log.d(TAG, "channel $channel: connect() failed: ${e.message}")
             closeQuietly(sock)
             return null
         }
@@ -133,12 +139,14 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
                     val probe = FrameEncoder.encode(Commands.GET_PROTO_VERSION, byteArrayOf(0x01), fsn = 1)
                     out.write(probe)
                     out.flush()
+                    Log.d(TAG, "channel $channel: sent probe ${probe.toHexString()}")
 
                     val initial = readWithDeadline(input, PROBE_TIMEOUT_MS)
                     // Only accept the two known frame headers — a channel that answers
                     // with anything else (e.g. HFP's AT-command channel) is not ours,
                     // same guard something-x applies for the same reason.
                     if (initial.isEmpty() || (initial[0].toInt() and 0xFF) != Commands.SOF) {
+                        Log.d(TAG, "channel $channel: no usable response, got ${initial.toHexString()}")
                         closeQuietly(sock)
                         null
                     } else {
@@ -147,6 +155,7 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
                 }
             }
         } catch (e: IOException) {
+            Log.d(TAG, "channel $channel: probe I/O failed: ${e.message}")
             closeQuietly(sock)
             null
         }
@@ -185,11 +194,14 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
             val buffer = ByteArray(256)
             while (true) {
                 val n = withContext(Dispatchers.IO) { input.read(buffer) }
-                if (n < 0) break
+                if (n < 0) {
+                    Log.i(TAG, "recv loop: stream closed by peer")
+                    break
+                }
                 dispatchFrames(parser.feed(buffer.copyOf(n)))
             }
         } catch (e: IOException) {
-            // Falls through to disconnect handling below.
+            Log.w(TAG, "recv loop: I/O error, disconnecting: ${e.message}")
         } finally {
             _connectionState.value = ConnectionState.Disconnected
             closeQuietly(socket)
@@ -200,6 +212,7 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
 
     private suspend fun dispatchFrames(frames: List<Frame>) {
         for (frame in frames) {
+            Log.d(TAG, "RX cmd=0x${frame.cmd.toString(16)} payload=${frame.payload.toHexString()}")
             val followUps = session.handleFrame(frame)
             _deviceState.value = session.state
             for (cmd in followUps) {
@@ -209,15 +222,20 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
     }
 
     private suspend fun sendCommand(command: OutgoingCommand) {
-        val out = output ?: return
+        val out = output ?: run {
+            Log.w(TAG, "sendCommand: no output stream (not connected), dropped ${command.label}")
+            return
+        }
         writeMutex.withLock {
             fsn = (fsn + 1) and 0xFF
             val frame = FrameEncoder.encode(command.cmd, command.payload, fsn)
+            Log.d(TAG, "TX cmd=0x${command.cmd.toString(16)} ${command.label} ${frame.toHexString()}")
             withContext(Dispatchers.IO) {
                 try {
                     out.write(frame)
                     out.flush()
                 } catch (e: IOException) {
+                    Log.e(TAG, "sendCommand: write failed: ${e.message}")
                     _connectionState.value = ConnectionState.Failed("Write failed: ${e.message}")
                 }
             }
@@ -225,6 +243,7 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
     }
 
     override suspend fun disconnect() {
+        Log.i(TAG, "disconnect()")
         connectionJob?.cancel()
         closeQuietly(socket)
         socket = null
@@ -233,12 +252,14 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
     }
 
     override suspend fun setAncMode(mode: AncMode) {
+        Log.i(TAG, "setAncMode($mode)")
         val cmd = session.setAncMode(mode)
         _deviceState.value = session.state
         sendCommand(cmd)
     }
 
     override suspend fun setEqPreset(preset: EqPreset) {
+        Log.i(TAG, "setEqPreset($preset)")
         val cmd = session.setEqPreset(preset)
         _deviceState.value = session.state
         sendCommand(cmd)
@@ -267,3 +288,5 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
         private val PROBE_CHANNELS = listOf(15, 17, 16, 18, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
     }
 }
+
+private fun ByteArray.toHexString(): String = joinToString(" ") { "%02x".format(it) }

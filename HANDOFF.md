@@ -1,86 +1,88 @@
 # HANDOFF
 
-Last updated: 2026-09-21, first build session.
+Last updated: 2026-09-21, first build session + first real-hardware round.
 
 ## What's done
 
-- **`protocol` module**: frame codec (`FrameEncoder`/`FrameParser`), CRC16/ARC,
-  command IDs (battery/ANC/EQ/activation/wear-status/firmware/serial), and
-  `EarbudsSession` (the protocol state machine, ported from something-x's
-  `NothingDevice._dispatch_x55`). **Built and unit-tested for real** — 17
-  tests, all passing, in this sandbox (`./gradlew :protocol:test`).
+- **`protocol` module**: frame codec, CRC16/ARC, command IDs (battery/ANC/EQ/
+  activation/wear-status/firmware/serial), `EarbudsSession` state machine.
+  **Built and unit-tested for real** — 17 tests, all passing.
 - **`bluetooth` module**: `DirectRfcommTransport` (watch-direct RFCOMM
-  connection, channel probe, recv loop, command send), `BondedDevices`
-  (paired-device listing), `NothingDeviceMatcher` (Nothing/CMF name
-  matching). Written, **not built** — see "What's not verified" below.
-- **`wear` module**: Compose app — device list screen, device detail screen
-  (pill-shaped ANC selector styled after the Galaxy Wearable app screenshots
-  the user gave as inspiration, EQ preset chips, battery text), permission
-  gate, DataStore-backed prefs, `DeviceViewModel`, and a quick-glance Tile
-  (`NothingXTileService`, read-only v1, styled after the "rounded pill"
-  reference image). Written, **not built**.
-- **`phone` module**: scaffold only, explicitly not functional. See its
-  `MainActivity` doc comment.
-- Repo scaffolding: Gradle wrapper (generated in-sandbox, Gradle 8.7),
-  `.gitignore`, `local.properties.example`, GitHub Actions CI
-  (`.github/workflows/ci.yml`), MIT `LICENSE` + `THIRD_PARTY_NOTICES.md` for
-  the AGPLv3-sourced icons.
+  connection, channel probe, recv loop, command send — now with `Log.d/i/w/e`
+  under tag `NothingX` throughout, see "Debugging on device" below),
+  `BondedDevices`, `NothingDeviceMatcher`.
+- **`wear` module**: Compose app — device list (now filters to
+  Nothing/CMF-matched devices by default, with a "show all paired devices"
+  fallback chip), device detail screen (ANC selector, battery text; EQ UI
+  removed for now, not a priority — the protocol plumbing is still there), a
+  Tile (`NothingXTileService`) styled as an edge-to-edge rounded card with an
+  icon badge and a 3-dot ANC mode indicator.
+- **`phone` module**: scaffold only, explicitly not functional.
+- CI (`.github/workflows/ci.yml`), MIT `LICENSE` + `THIRD_PARTY_NOTICES.md`.
 
 ## What's verified vs. not
 
-**Verified, for real, in this session:**
-- `protocol` module compiles and all 17 unit tests pass on JDK 21 via
-  Gradle 8.14.3 (this sandbox's toolchain).
-- `dl.google.com` is network-blocked in this sandbox by policy — confirmed
-  via the agent-proxy status endpoint, not assumed. This is *why* the Android
-  modules are unbuilt here, not a project defect.
+**Confirmed on real hardware (Galaxy Watch 4 + CMF Buds Pro 2, 2026-09-21):**
+- `DirectRfcommTransport`'s reflection-based RFCOMM channel connect works on
+  Wear OS 3. This was the single biggest open architectural risk and it's
+  resolved — the direct-connect design is viable, not just theoretical.
+- ANC mode switching (off / ANC / transparency) round-trips correctly over
+  this connection on a CMF Buds Pro 2.
+- CI is fully green: `protocol`, `bluetooth`, `wear`, and `phone` all build
+  against the real Android SDK (GitHub Actions), not just this sandbox's
+  best-effort read of API surfaces.
 
-**NOT verified — needs a machine with a real Android SDK and internet:**
-- Whether `wear`, `bluetooth`, and `phone` actually compile. They're written
-  carefully and the protocol layer under them is solid, but zero Android
-  compiler feedback has touched this code yet. Expect at least a few
-  small build errors (dependency version mismatches, ProtoLayout/Tiles API
-  surface details — that API changes between library versions and I was
-  writing against my best recollection of `androidx.wear.tiles`/
-  `androidx.wear.protolayout` 1.4.0/1.2.0's shape, not a live compiler).
-- Whether `DirectRfcommTransport`'s reflection-based
-  `createRfcommSocket(int)` call works on Wear OS at all — this is the
-  central hardware risk, see `CLAUDE.md`'s note on it. Nothing here confirms
-  a Wear OS watch can open a Classic RFCOMM socket to a *third* device (not
-  its paired phone).
-- Whether the channel-probe list, activation handshake, and command IDs
-  actually get a real Nothing Ear device to respond over Android's BT stack
-  — they're a faithful port of something-x's confirmed-working Linux
-  implementation, but Android's Bluetooth stack behaves differently in
-  plenty of subtle ways from BlueZ.
-- CMF Buds command IDs — unverified in the *source* material this was ported
-  from, let alone by us.
+**Still unconfirmed:**
+- Battery and EQ round-trip on CMF specifically (user has only reported on
+  ANC so far).
+- Whether the channel-probe list and activation handshake work the same way
+  on other Nothing/CMF models, or other watches.
+- CMF Buds command IDs beyond what's now confirmed working (ANC) — battery/
+  EQ/wear-status on CMF still ride on the "probably same as Nothing, unverified"
+  assumption from something-x/ear-web.
+
+## Debugging on device
+
+`DirectRfcommTransport` logs everything (channel probe attempts, TX/RX frame
+bytes, connection state) under tag `NothingX`. To watch it live:
+
+```bash
+adb logcat -c                # clear old logs first
+adb logcat -s NothingX:V      # follow only this app's protocol logs
+```
+
+If you need full context around a crash (not just the protocol logs):
+
+```bash
+adb logcat -s NothingX:V AndroidRuntime:E
+```
 
 ## Next steps, in order
 
-1. **Build it.** `cp local.properties.example local.properties`, point at the
-   SABRENT SDK, run `./gradlew :wear:assembleDebug`. Fix whatever compile
-   errors show up — expect some in the Tile code especially.
-2. **The one test that actually matters first**: `adb install` the debug APK
-   to the Galaxy Watch 4, pair Nothing earbuds to the *watch itself* (not
-   just the phone), and see if `DirectRfcommTransport.connect()` gets past
-   the channel probe to a real `0x55` response. If it never does, the whole
-   direct-connect architecture needs to fall back to the phone-relay path —
-   that's a real possible outcome, not just a formality.
-3. If direct connect works: verify battery/ANC/EQ round-trip against real
-   hardware, then wire up the raw-frame debug logging mentioned in
-   `CLAUDE.md` before touching CMF hardware.
-4. If direct connect doesn't work: `phone/` needs its actual Data Layer
-   relay implementation — currently just a placeholder module.
-5. Once the core loop works: v2 features from ear-web's larger command set,
-   in-tile quick actions, launcher icon/mipmap set (currently reusing the
-   earbuds drawable as the app icon, no adaptive icon).
+1. ~~Build it, confirm direct RFCOMM connect works on real hardware~~ — done.
+2. Confirm battery and EQ round-trip on CMF Buds Pro 2 (EQ UI is currently
+   hidden but `viewModel.setEqPreset()` still works if called).
+3. **Gestures/touch controls** — user asked for this (matching Samsung Buds
+   Controller's touch-control toggle). Nothing Ear does support this per
+   ear-web's `sendGetGesture()`/gesture-set commands, but those command IDs
+   were never mined into `protocol/Commands.kt` (v1 scope was deliberately
+   core-only). Next real feature to add: pull the actual command bytes from
+   `ear-web/res/js/bluetooth_socket.js` and `control.js`, port them the same
+   way `protocol`'s existing commands were ported from something-x, and wire
+   up a gestures screen.
+4. **Explicitly out of scope** — flagged to the user directly: Spatial
+   Audio/360/head tracking and Bixby voice commands are Samsung Galaxy Buds
+   features with no Nothing/CMF protocol equivalent in either source repo.
+   Don't build fake toggles for these.
+5. Tile is still read-only (no live RFCOMM connection of its own) — v2 item
+   is either a bound background service or the phone-relay transport wired
+   to a Tile action for in-tile quick toggling.
+6. Launcher icon is still `ic_earbuds.xml` reused directly, no adaptive
+   mipmap set.
 
 ## Known limits
 
-- No adaptive launcher icon — `ic_earbuds.xml` is used directly as
-  `android:icon`, which works but isn't a proper mipmap set.
-- Tile has no live connection — see `CLAUDE.md`.
-- No SDP-based channel discovery, probe-list only (something-x tries SDP
-  first as a priority hint; skipped here for v1 simplicity — see
-  `DirectRfcommTransport`'s doc comment).
+- No adaptive launcher icon.
+- Tile has no live connection, no in-tile quick actions yet.
+- No SDP-based channel discovery, probe-list only.
+- `phone/` module is not functional — see its `MainActivity` doc comment.

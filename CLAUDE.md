@@ -69,6 +69,19 @@ depending on `protocol` and needing matching JDK bytecode targets), lower
 being on 17 is the real constraint (AGP-driven), `protocol` being on 21 is
 just "whatever was available when it was first verified."
 
+### Field-confirmed on real hardware (2026-09-21)
+
+Direct RFCOMM connect from a Galaxy Watch 4 to a CMF Buds Pro 2 works, and
+ANC mode switching round-trips correctly over it. This resolves the central
+open question below — the reflection-based channel connect **is** viable on
+Wear OS 3, at least on this hardware pairing. Battery and EQ round-trip on
+CMF specifically are still unconfirmed (user hasn't reported on those yet).
+Bonded-device matching had a real UX bug found in this same session: the
+device list showed every paired Bluetooth device with only a color hint for
+which one was Nothing/CMF gear, which wasn't legible enough — fixed by
+filtering to matched devices by default with a "show all" fallback chip
+(`DeviceListScreen.kt`).
+
 ### The reflection-based RFCOMM channel connect (`DirectRfcommTransport`)
 
 Android's public `BluetoothDevice` API only exposes
@@ -79,12 +92,12 @@ Serial both allow directly). On Android, that requires the same private
 `createRfcommSocket(int channel)` reflection call that every Bluetooth-SPP-
 terminal app on the Play Store relies on for the same reason
 (`openRfcommChannel` in `DirectRfcommTransport.kt`). This has worked across
-Android versions for years but isn't a stable public contract. **This is the
-single biggest unverified risk in the whole direct-connect design** — nobody
-has confirmed a Wear OS watch (as opposed to a phone) can hold this kind of
-socket to a third Classic BT device that isn't its own paired phone. First
-real hardware test should be exactly this, before spending time on anything
-else.
+Android versions for years but isn't a stable public contract. **Confirmed
+working** on a Galaxy Watch 4 connecting directly to a CMF Buds Pro 2 (see
+the field-confirmed note above) — this was the single biggest unverified
+risk in the whole direct-connect design, and it panned out. Still worth
+treating carefully on other hardware/Android version combinations since
+it's a private API, not a stable public contract.
 
 ### CMF command IDs are guesses, not confirmed
 

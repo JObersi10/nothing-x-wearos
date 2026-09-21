@@ -5,7 +5,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
@@ -17,13 +21,20 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.nothingx.bluetooth.BondedDevice
 import com.nothingx.wear.data.DeviceViewModel
-import androidx.compose.runtime.collectAsState
 
 @Composable
 fun DeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedDevice) -> Unit) {
     val devices by viewModel.bondedDevices.collectAsState()
+    // Default to only the devices NothingDeviceMatcher recognizes — the point
+    // is the user shouldn't have to guess which bonded device is their
+    // earbuds among every paired accessory. "Show all" is the fallback for
+    // when a device's Bluetooth name doesn't match any known pattern.
+    var showAll by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.refreshBondedDevices() }
+
+    val supported = devices.filter { it.isSupported }
+    val visible = if (showAll) devices else supported
 
     ScalingLazyColumn(
         modifier = Modifier
@@ -34,15 +45,19 @@ fun DeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedDevice
         item {
             ListHeader { Text("Nothing X") }
         }
-        if (devices.isEmpty()) {
+        if (visible.isEmpty()) {
             item {
                 Text(
-                    "No paired devices found.\nPair your earbuds in Bluetooth settings first.",
+                    if (devices.isEmpty()) {
+                        "No paired devices found.\nPair your earbuds in Bluetooth settings first."
+                    } else {
+                        "No paired device looks like Nothing/CMF earbuds.\nTap below to see everything paired."
+                    },
                     color = MaterialTheme.colors.onSurfaceVariant,
                 )
             }
         }
-        items(devices) { device ->
+        items(visible) { device ->
             Chip(
                 onClick = { onDeviceSelected(device) },
                 label = {
@@ -58,6 +73,15 @@ fun DeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedDevice
                     },
                 ),
             )
+        }
+        if (!showAll && supported.size != devices.size) {
+            item {
+                Chip(
+                    onClick = { showAll = true },
+                    label = { Text("Show all paired devices") },
+                    colors = ChipDefaults.chipColors(backgroundColor = MaterialTheme.colors.surface),
+                )
+            }
         }
     }
 }

@@ -13,13 +13,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
-import androidx.wear.compose.foundation.lazy.items
-import androidx.wear.compose.material.Chip
-import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.nothingx.bluetooth.ConnectionState
-import com.nothingx.protocol.EqPreset
 import com.nothingx.wear.data.DeviceViewModel
 
 @Composable
@@ -87,28 +83,8 @@ fun DeviceDetailScreen(viewModel: DeviceViewModel, address: String, deviceName: 
             )
         }
 
-        item {
-            Text(
-                text = "Equalizer",
-                fontSize = 12.sp,
-                color = MaterialTheme.colors.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-            )
-        }
-        items(EqPreset.entries.toTypedArray()) { preset ->
-            Chip(
-                onClick = { viewModel.setEqPreset(preset) },
-                label = { Text(preset.label()) },
-                colors = ChipDefaults.chipColors(
-                    backgroundColor = if (deviceState.eqPreset == preset) {
-                        MaterialTheme.colors.primary
-                    } else {
-                        MaterialTheme.colors.surface
-                    },
-                ),
-            )
-        }
+        // EQ UI intentionally left out for now (not a priority) — the protocol
+        // and viewModel.setEqPreset() plumbing is still there if this comes back.
     }
 }
 
@@ -116,10 +92,3 @@ private fun batteryLine(left: Int, right: Int): String =
     "L ${percentOrDash(left)} • R ${percentOrDash(right)}"
 
 private fun percentOrDash(value: Int): String = if (value < 0) "—" else "$value%"
-
-private fun EqPreset.label(): String = when (this) {
-    EqPreset.BALANCED -> "Balanced"
-    EqPreset.MORE_BASS -> "More Bass"
-    EqPreset.MORE_TREBLE -> "More Treble"
-    EqPreset.VOICE -> "Voice"
-}
