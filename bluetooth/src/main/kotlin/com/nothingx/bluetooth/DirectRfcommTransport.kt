@@ -10,9 +10,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
+import com.nothingx.bluetooth.log.NothingXLog as Log
 import com.nothingx.protocol.AncMode
 import com.nothingx.protocol.Commands
 import com.nothingx.protocol.DeviceState

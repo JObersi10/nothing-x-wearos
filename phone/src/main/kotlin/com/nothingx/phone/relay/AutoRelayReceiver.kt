@@ -6,10 +6,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import com.nothingx.bluetooth.NothingDeviceMatcher
+import com.nothingx.bluetooth.log.NothingXLog as Log
 
 private const val TAG = "NothingXRelay"
 
@@ -34,6 +34,7 @@ private const val TAG = "NothingXRelay"
 class AutoRelayReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != BluetoothDevice.ACTION_ACL_CONNECTED) return
+        Log.init(context)
 
         val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
             PackageManager.PERMISSION_GRANTED

@@ -6,8 +6,8 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
-import android.util.Log
 import androidx.core.content.ContextCompat
+import com.nothingx.bluetooth.log.NothingXLog as Log
 
 private const val TAG = "NothingX"
 

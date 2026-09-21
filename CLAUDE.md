@@ -577,6 +577,70 @@ different physical devices (watch logs `EarbudsConnectionHolder`/
 `WearRelayTransport`; phone logs `PhoneRelayService`/`AutoRelayReceiver`) —
 debugging the relay for real means running it once against each.
 
+### In-app log capture + export on the phone (2026-09-22)
+
+Getting a phone-side capture still required `adb` — fine for the watch,
+which is always plugged in during a dev session anyway, but the phone is
+just a normal phone the user carries around, and asking them to set up
+`adb` on it to report a relay bug is a bad ask. `NothingXLog`
+(`bluetooth/.../log/NothingXLog.kt`) is a drop-in replacement for
+`android.util.Log` — same method names/signatures, swapped in at call
+sites via `import com.nothingx.bluetooth.log.NothingXLog as Log` (so the
+diff is just the import line, not touching any actual `Log.i(...)` call)
+— that also appends every line to `nothingx_log.txt` in app-internal
+storage once `NothingXLog.init(context)` has been called in that process.
+
+Wired into exactly the phone-relay call chain: `PhoneRelayService`,
+`AutoRelayReceiver`, and the shared `DirectRfcommTransport`/`BondedDevices`
+(both used by the phone too). `init()` is called from all three of the
+phone process's real entry points (`MainActivity.onCreate`,
+`PhoneRelayService.onCreate`, `AutoRelayReceiver.onReceive`) since any of
+them can be the first thing that runs in a cold process. **Deliberately
+not wired into the watch side** — `init()` is never called there, so
+`NothingXLog` on the watch is a no-op past the normal `Log.x()` call
+(`logFile` stays null, `write()` early-returns) — this was scoped to the
+phone specifically since that's where a bug is hardest to get `adb` onto,
+not a general "replace all logging" pass.
+
+`MainActivity` gained an "Export logs" button — shares
+`NothingXLog.currentFile()` through the normal Android share sheet via a
+`FileProvider` (`phone/src/main/res/xml/file_paths.xml` exposes exactly
+`filesDir`, nothing else; `android:authorities="${applicationId}.fileprovider"`
+in the manifest). Not a raw `file://` path — that throws
+`FileUriExposedException` on a `targetSdk` this high, `FileProvider`'s
+`content://` URI plus `FLAG_GRANT_READ_URI_PERMISSION` is the required
+modern approach.
+
+**Unverified**: written in response to a live "connects then drops after
+~1 second" bug report on the phone relay (see below) but not yet exercised
+on hardware itself — does the button actually produce a shareable file, is
+appending a `FileWriter(file, true)` open/close per log line going to be a
+problem under load (it's not gated by `Log.isLoggable`, so it runs on every
+`Log.i`/`Log.w`/`Log.e`/`Log.d` call site, not just the DEBUG-gated hex
+dumps) if the relay is chatty. Also caps at ~1MB (halved on `init()` once
+exceeded) rather than a proper rotating file — fine for a bug-report
+capture, not meant as a long-term log.
+
+### Live bug: phone relay connects, then disconnects after ~1s (2026-09-22, unresolved)
+
+Reported on the current (post-picker) build: "failed to connect" some of
+the time, and when it does connect, the notification flips back to
+disconnected about a second later. Not yet root-caused — no log captured
+yet (this is exactly what the export button above was added to make easy
+to get). Working theory, unconfirmed: the watch's confirmed-working direct
+connect is to a device with *no other active Bluetooth profile* — the
+phone, by contrast, already holds A2DP/HFP audio to the earbuds before the
+relay opens its own raw RFCOMM channel via `openRfcommChannel`'s reflection
+call on top of that. Some earbuds firmware may not tolerate a second
+concurrent RFCOMM channel and drop the link — that would show up as a real
+`ACTION_ACL_DISCONNECTED` for the device (`DirectRfcommTransport`'s
+`registerAclReceiver`, which force-closes the socket the instant it fires),
+not a bug in this app's code, but this is a hypothesis, not a finding.
+Next step: an exported log from a phone-side repro — specifically whether
+`"ACL disconnected from ... — forcing socket closed"` appears (real link
+drop) vs. `"recv loop: stream closed by peer"` / an I/O error (something
+else entirely).
+
 ## Icons and branding
 
 `wear/src/main/res/drawable/ic_anc_*.xml`, `ic_arrow_right.xml`, `ic_back.xml`

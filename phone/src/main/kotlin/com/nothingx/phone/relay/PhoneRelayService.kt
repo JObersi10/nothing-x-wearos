@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.PutDataMapRequest
@@ -17,6 +16,7 @@ import com.nothingx.bluetooth.BondedDevices
 import com.nothingx.bluetooth.ConnectionState
 import com.nothingx.bluetooth.DirectRfcommTransport
 import com.nothingx.bluetooth.EarbudsTransport
+import com.nothingx.bluetooth.log.NothingXLog as Log
 import com.nothingx.bluetooth.relay.RelayCodec
 import com.nothingx.bluetooth.relay.RelayPaths
 import com.nothingx.phone.MainActivity
@@ -76,6 +76,7 @@ class PhoneRelayService : WearableListenerService() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.init(this)
         Log.i(TAG, "PhoneRelayService.onCreate()")
         createNotificationChannelIfNeeded()
     }

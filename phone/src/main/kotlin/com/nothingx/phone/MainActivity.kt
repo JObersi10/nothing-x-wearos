@@ -2,6 +2,7 @@ package com.nothingx.phone
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -12,8 +13,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.nothingx.bluetooth.BondedDevice
 import com.nothingx.bluetooth.BondedDevices
+import com.nothingx.bluetooth.log.NothingXLog
 import com.nothingx.phone.relay.PhoneRelayService
 
 private val REQUIRED_PERMISSIONS: Array<String> = buildList {
@@ -50,6 +53,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        NothingXLog.init(this)
         buildUi()
         if (!hasPermissions()) {
             ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, PERMISSION_REQUEST_CODE)
@@ -125,7 +129,36 @@ class MainActivity : Activity() {
             },
         )
 
+        root.addView(
+            Button(this).apply {
+                text = "Export logs"
+                setOnClickListener { exportLogs() }
+            },
+        )
+
         setContentView(root)
+    }
+
+    /**
+     * Shares the on-device relay log ([NothingXLog]'s file, written to by
+     * [PhoneRelayService]/[com.nothingx.phone.relay.AutoRelayReceiver]/
+     * `DirectRfcommTransport` since they route their logging through it) via
+     * the normal Android share sheet — this is what lets a bug get reported
+     * with real log content without the reporter needing `adb` set up.
+     */
+    private fun exportLogs() {
+        val file = NothingXLog.currentFile()
+        if (file == null || !file.exists() || file.length() == 0L) {
+            Toast.makeText(this, "No logs captured yet — connect or try the relay first.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(shareIntent, "Export Nothing X relay log"))
     }
 
     private fun refreshDeviceList() {
