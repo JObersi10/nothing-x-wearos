@@ -1,8 +1,8 @@
 package com.nothingx.phone
 
+import android.app.Activity
 import android.os.Bundle
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 
 /**
  * Phone-side companion app — SCAFFOLD ONLY, not functional yet.
@@ -16,8 +16,15 @@ import androidx.appcompat.app.AppCompatActivity
  * from the watch. That listener is NOT implemented yet; this is just enough
  * of a module to prove the dependency wiring (:protocol, :bluetooth) and
  * give v2 a place to start. Don't ship this as "phone relay works."
+ *
+ * Plain [Activity], not AppCompatActivity: this had a real crash-on-launch
+ * bug (confirmed on device) — AppCompatActivity requires a Theme.AppCompat
+ * (or descendant) theme, but the manifest uses the platform's
+ * Theme.DeviceDefault, so it threw immediately in onCreate/setContentView.
+ * This scaffold doesn't need any AppCompat feature, so dropping down to
+ * plain Activity removes the whole bug class instead of juggling themes.
  */
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val view = TextView(this).apply {

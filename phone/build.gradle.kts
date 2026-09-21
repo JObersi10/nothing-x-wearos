@@ -31,6 +31,5 @@ android {
 dependencies {
     implementation(project(":protocol"))
     implementation(project(":bluetooth"))
-    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.gms:play-services-wearable:18.2.0")
 }
