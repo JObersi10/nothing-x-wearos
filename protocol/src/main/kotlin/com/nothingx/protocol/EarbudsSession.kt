@@ -29,6 +29,7 @@ class EarbudsSession {
             Commands.SET_ACTIVATED -> {
                 state = state.copy(activated = true)
                 cmds += queryAllCommand()
+                cmds += querySettingsCommand()
             }
             Commands.GET_BATTERY, Commands.EVT_BATTERY -> applyBattery(frame.payload)
             Commands.GET_NOISE_REDUCTION, Commands.EVT_NOISE_REDUCTION -> applyAnc(frame.payload)
@@ -46,6 +47,48 @@ class EarbudsSession {
                 val serial = parseSerialNumber(frame.payload)
                 if (serial != null) state = state.copy(serialNumber = serial)
             }
+            Commands.GET_IN_EAR -> {
+                // ear-web reads byte index 10 (hexArray[10]) of the full frame,
+                // i.e. payload index 2 (payload starts at frame byte 8).
+                if (frame.payload.size > 2) {
+                    state = state.copy(inEarDetectionEnabled = frame.payload[2].toInt() != 0)
+                }
+            }
+            Commands.GET_LATENCY -> {
+                // payload index 0 (frame byte 8): 1=on, 2=off per ear-web's setLatencyModeCheckbox.
+                if (frame.payload.isNotEmpty()) {
+                    state = state.copy(lowLatencyEnabled = frame.payload[0].toInt() == 1)
+                }
+            }
+            Commands.GET_PERSONALIZED_ANC -> {
+                if (frame.payload.isNotEmpty()) {
+                    state = state.copy(personalizedAncEnabled = frame.payload[0].toInt() != 0)
+                }
+            }
+            Commands.GET_ENHANCED_BASS -> {
+                // payload: [enabled, level*2, ...]
+                if (frame.payload.size > 1) {
+                    state = state.copy(
+                        bassEnhanceEnabled = frame.payload[0].toInt() != 0,
+                        bassLevel = (frame.payload[1].toInt() and 0xFF) / 2,
+                    )
+                }
+            }
+            Commands.GET_GESTURE -> {
+                if (frame.payload.isNotEmpty()) {
+                    state = state.copy(gestureCount = frame.payload[0].toInt() and 0xFF)
+                }
+            }
+            Commands.EVT_EAR_FIT_TEST_RESULT -> {
+                if (frame.payload.size > 1) {
+                    state = state.copy(
+                        earFitTestResult = EarFitTestResult(
+                            left = frame.payload[0].toInt() and 0xFF,
+                            right = frame.payload[1].toInt() and 0xFF,
+                        ),
+                    )
+                }
+            }
         }
         return cmds
     }
@@ -58,6 +101,65 @@ class EarbudsSession {
         OutgoingCommand(Commands.GET_HOST_VERSION, label = "get firmware"),
         OutgoingCommand(Commands.GET_REMOTE_CONF, label = "get serial"),
     )
+
+    /** Settings-screen queries — called separately since not every device supports all of them. */
+    fun querySettingsCommand(): List<OutgoingCommand> = listOf(
+        OutgoingCommand(Commands.GET_IN_EAR, label = "get in-ear detection"),
+        OutgoingCommand(Commands.GET_LATENCY, label = "get low latency"),
+        OutgoingCommand(Commands.GET_PERSONALIZED_ANC, label = "get personalized anc"),
+        OutgoingCommand(Commands.GET_ENHANCED_BASS, label = "get bass enhance"),
+        OutgoingCommand(Commands.GET_GESTURE, label = "get gesture count"),
+    )
+
+    fun setInEarDetection(enabled: Boolean): OutgoingCommand {
+        state = state.copy(inEarDetectionEnabled = enabled)
+        return OutgoingCommand(
+            Commands.SET_IN_EAR,
+            byteArrayOf(0x01, 0x01, if (enabled) 0x01 else 0x00),
+            label = "set in-ear=$enabled",
+        )
+    }
+
+    fun setLowLatency(enabled: Boolean): OutgoingCommand {
+        state = state.copy(lowLatencyEnabled = enabled)
+        return OutgoingCommand(
+            Commands.SET_LATENCY,
+            byteArrayOf(if (enabled) 0x01 else 0x02, 0x00),
+            label = "set low-latency=$enabled",
+        )
+    }
+
+    fun setPersonalizedAnc(enabled: Boolean): OutgoingCommand {
+        state = state.copy(personalizedAncEnabled = enabled)
+        return OutgoingCommand(
+            Commands.SET_PERSONALIZED_ANC,
+            byteArrayOf(if (enabled) 0x01 else 0x00),
+            label = "set personalized-anc=$enabled",
+        )
+    }
+
+    /** [level] is 0-4 (displayed level); wire encoding doubles it. */
+    fun setBassEnhance(enabled: Boolean, level: Int): OutgoingCommand {
+        state = state.copy(bassEnhanceEnabled = enabled, bassLevel = level)
+        return OutgoingCommand(
+            Commands.SET_ENHANCED_BASS,
+            byteArrayOf(if (enabled) 0x01 else 0x00, (level * 2).toByte()),
+            label = "set bass enhance=$enabled level=$level",
+        )
+    }
+
+    /** Find-my-earbuds: [isLeft]=null rings both (Ear (1) wire format), otherwise rings one side. */
+    fun ringBuds(ring: Boolean, isLeft: Boolean? = null): OutgoingCommand {
+        val payload = if (isLeft == null) {
+            byteArrayOf(if (ring) 0x01 else 0x00)
+        } else {
+            byteArrayOf(if (isLeft) 0x02 else 0x03, if (ring) 0x01 else 0x00)
+        }
+        return OutgoingCommand(Commands.RING_BUDS, payload, label = "ring buds=$ring")
+    }
+
+    fun launchEarFitTest(): OutgoingCommand =
+        OutgoingCommand(Commands.LAUNCH_EAR_FIT_TEST, byteArrayOf(0x01), label = "launch ear fit test")
 
     fun setAncMode(mode: AncMode): OutgoingCommand {
         state = state.copy(ancMode = mode)

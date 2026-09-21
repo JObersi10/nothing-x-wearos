@@ -265,6 +265,49 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
         sendCommand(cmd)
     }
 
+    override suspend fun querySettings() {
+        Log.i(TAG, "querySettings()")
+        for (cmd in session.querySettingsCommand()) sendCommand(cmd)
+    }
+
+    override suspend fun setInEarDetection(enabled: Boolean) {
+        Log.i(TAG, "setInEarDetection($enabled)")
+        val cmd = session.setInEarDetection(enabled)
+        _deviceState.value = session.state
+        sendCommand(cmd)
+    }
+
+    override suspend fun setLowLatency(enabled: Boolean) {
+        Log.i(TAG, "setLowLatency($enabled)")
+        val cmd = session.setLowLatency(enabled)
+        _deviceState.value = session.state
+        sendCommand(cmd)
+    }
+
+    override suspend fun setPersonalizedAnc(enabled: Boolean) {
+        Log.i(TAG, "setPersonalizedAnc($enabled)")
+        val cmd = session.setPersonalizedAnc(enabled)
+        _deviceState.value = session.state
+        sendCommand(cmd)
+    }
+
+    override suspend fun setBassEnhance(enabled: Boolean, level: Int) {
+        Log.i(TAG, "setBassEnhance($enabled, $level)")
+        val cmd = session.setBassEnhance(enabled, level)
+        _deviceState.value = session.state
+        sendCommand(cmd)
+    }
+
+    override suspend fun ringBuds(ring: Boolean, isLeft: Boolean?) {
+        Log.i(TAG, "ringBuds($ring, $isLeft)")
+        sendCommand(session.ringBuds(ring, isLeft))
+    }
+
+    override suspend fun launchEarFitTest() {
+        Log.i(TAG, "launchEarFitTest()")
+        sendCommand(session.launchEarFitTest())
+    }
+
     private fun closeQuietly(sock: BluetoothSocket?) {
         try {
             sock?.close()

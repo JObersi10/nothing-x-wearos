@@ -24,4 +24,19 @@ interface EarbudsTransport {
     suspend fun setAncMode(mode: AncMode)
 
     suspend fun setEqPreset(preset: EqPreset)
+
+    /** Fetches in-ear detection, low latency, personalized ANC, bass enhance, gesture count. */
+    suspend fun querySettings()
+
+    suspend fun setInEarDetection(enabled: Boolean)
+
+    suspend fun setLowLatency(enabled: Boolean)
+
+    suspend fun setPersonalizedAnc(enabled: Boolean)
+
+    suspend fun setBassEnhance(enabled: Boolean, level: Int)
+
+    suspend fun ringBuds(ring: Boolean, isLeft: Boolean? = null)
+
+    suspend fun launchEarFitTest()
 }

@@ -14,6 +14,7 @@ import com.nothingx.wear.data.DeviceViewModel
 import com.nothingx.wear.ui.DeviceDetailScreen
 import com.nothingx.wear.ui.DeviceListScreen
 import com.nothingx.wear.ui.PermissionGate
+import com.nothingx.wear.ui.SettingsScreen
 import com.nothingx.wear.ui.theme.NothingXTheme
 
 class MainActivity : ComponentActivity() {
@@ -46,7 +47,10 @@ private fun NothingXApp(viewModel: DeviceViewModel) {
             composable("detail/{address}/{name}") { backStackEntry ->
                 val address = backStackEntry.arguments?.getString("address").orEmpty()
                 val name = backStackEntry.arguments?.getString("name").orEmpty()
-                DeviceDetailScreen(viewModel, address, name)
+                DeviceDetailScreen(viewModel, address, name, onOpenSettings = { navController.navigate("settings") })
+            }
+            composable("settings") {
+                SettingsScreen(viewModel)
             }
         }
     }

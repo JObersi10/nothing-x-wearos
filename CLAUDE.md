@@ -117,15 +117,36 @@ this should be one of the first things added — a debug flag that logs every
 `FrameParser`-decoded frame (or better, the raw bytes before parsing) so a
 CMF hardware capture can confirm or correct command IDs.
 
-### v1 scope is intentionally narrow
+### v1 core scope vs. the settings screen (mined 2026-09-21)
 
-Battery, ANC (off/on/transparency), EQ presets only — matches something-x's
-confirmed-working set. ear-web documents a much larger command surface
-(gestures, advanced/custom EQ, personalized ANC, find-my-earbuds, in-ear
-detection toggle, low-latency mode, bass enhance) that was deliberately left
-unmined into `Commands.kt` for v1. When picking that up, `ear-web/res/js/
-bluetooth_socket.js` and `control.js` are the source to mine — see
-`THIRD_PARTY_NOTICES.md`.
+Battery, ANC (off/on/transparency), EQ presets were v1's core scope, matching
+something-x's confirmed-working set. The user then asked for the broader
+settings list ear-web supports, so its command IDs got mined into
+`Commands.kt` for real — in-ear detection, low latency mode, personalized
+ANC, bass enhance/"Ultra Bass", find-my-earbuds (ring), ear tip fit test, and
+a read-only gesture count. Source: `ear-web/res/js/bluetooth_socket.js`'s
+`send(command, ...)` calls — every command ID there is a literal decimal
+constant in code that project's users run against real hardware, so these
+are as trustworthy as the core set, not guesses (see `Commands.kt`'s doc
+comment for detail). **Not implemented**: gesture *editing* (read-only count
+only — the per-gesture array structure is more UI work than this pass
+covers), custom EQ (complex float-encoded 53-byte payload, `SET_CUSTOM_EQ`
+constant exists but no builder), CMF's separate "Listening Mode" EQ-equivalent
+command (`GET_LISTENING_MODE`/`SET_LISTENING_MODE` — CMF Buds/Buds Pro/Buds
+Pro 2 use a *different* command than `GET_EQ_MODE`/`SET_EQ` for what's
+functionally the same feature; this app's EQ UI is currently hidden anyway,
+see below), Spatial Audio (confirmed to exist in the official Nothing X app
+via a user-provided screenshot, but neither something-x nor ear-web
+reverse-engineered it — no command ID available without decompiling the
+official APK directly, which hasn't been done here), Bixby (Samsung-only,
+no Nothing/CMF equivalent exists at all).
+
+EQ UI stays hidden per earlier user direction (not a priority). Worth noting
+for whenever it comes back: the current `SET_EQ`/`GET_EQ_MODE` commands only
+work on Nothing Ear models — CMF devices need `SET_LISTENING_MODE`/
+`GET_LISTENING_MODE` instead, so re-enabling EQ for a CMF device (like the
+CMF Buds Pro 2 this was tested against) needs that branch, not just un-hiding
+the existing chips.
 
 ### Compose compiler version, not a Gradle plugin
 
@@ -155,8 +176,23 @@ Don't let a stale doc or commit message imply otherwise — check
 `phone/src/main/kotlin/com/nothingx/phone/MainActivity.kt`'s doc comment,
 which is the source of truth on what's there.
 
-## Icons
+## Icons and branding
 
 `wear/src/main/res/drawable/ic_anc_*.xml`, `ic_arrow_right.xml`, `ic_back.xml`
 are AGPLv3 (ported from ear-web). `ic_earbuds.xml` is original. See
 `THIRD_PARTY_NOTICES.md` before touching licensing-sensitive files.
+
+**Never use Nothing's actual trademarked assets** (their app icon, wordmark,
+NType/Ndot fonts) in this repo, even if a screenshot of them shows up in
+conversation. This app is unofficial and unaffiliated with Nothing
+Technology — using their real logo as this app's launcher icon would
+visually claim official status/endorsement, a different and more serious
+problem than the AGPL code-reuse question above (see ear-web's own README
+disclaimer for why every project like this one carries one). The launcher
+icon (`ic_launcher_background.xml`/`ic_launcher_foreground.xml`, adaptive
+icon via `mipmap-anydpi-v26/ic_launcher.xml`) is an original mark — a white
+ring with a Nothing-red accent dot, echoing the app's own ANC-selector
+selected-state dot, not a reproduction of anything official. When "leverage
+the Nothing design language" comes up again: colors, rounded-card layout,
+and general minimalist aesthetic are fair game; their specific logo, fonts,
+and any asset that could be mistaken for the real app are not.

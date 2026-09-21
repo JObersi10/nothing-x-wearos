@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Original launcher foreground for this (unofficial) app: a white ring with a
+  Nothing-red accent dot, evoking the ANC selector's own selected-state dot
+  (see wear/.../ui/AncSelector.kt) rather than copying Nothing's trademarked
+  "X" logo. Deliberately not a reproduction of any official Nothing asset —
+  see CLAUDE.md's icon/branding note for why.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- outer ring -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M54,54m-20,0a20,20 0,1 1,40 0a20,20 0,1 1,-40 0" />
+    <!-- red accent dot -->
+    <path
+        android:fillColor="#D41F1F"
+        android:pathData="M72,72m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0" />
+</vector>

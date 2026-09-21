@@ -59,4 +59,28 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     fun setEqPreset(preset: EqPreset) {
         viewModelScope.launch { transport.setEqPreset(preset) }
     }
+
+    fun setInEarDetection(enabled: Boolean) {
+        viewModelScope.launch { transport.setInEarDetection(enabled) }
+    }
+
+    fun setLowLatency(enabled: Boolean) {
+        viewModelScope.launch { transport.setLowLatency(enabled) }
+    }
+
+    fun setPersonalizedAnc(enabled: Boolean) {
+        viewModelScope.launch { transport.setPersonalizedAnc(enabled) }
+    }
+
+    fun setBassEnhance(enabled: Boolean, level: Int) {
+        viewModelScope.launch { transport.setBassEnhance(enabled, level) }
+    }
+
+    fun ringBuds(ring: Boolean, isLeft: Boolean? = null) {
+        viewModelScope.launch { transport.ringBuds(ring, isLeft) }
+    }
+
+    fun launchEarFitTest() {
+        viewModelScope.launch { transport.launchEarFitTest() }
+    }
 }

@@ -60,29 +60,33 @@ adb logcat -s NothingX:V AndroidRuntime:E
 ## Next steps, in order
 
 1. ~~Build it, confirm direct RFCOMM connect works on real hardware~~ — done.
-2. Confirm battery and EQ round-trip on CMF Buds Pro 2 (EQ UI is currently
-   hidden but `viewModel.setEqPreset()` still works if called).
-3. **Gestures/touch controls** — user asked for this (matching Samsung Buds
-   Controller's touch-control toggle). Nothing Ear does support this per
-   ear-web's `sendGetGesture()`/gesture-set commands, but those command IDs
-   were never mined into `protocol/Commands.kt` (v1 scope was deliberately
-   core-only). Next real feature to add: pull the actual command bytes from
-   `ear-web/res/js/bluetooth_socket.js` and `control.js`, port them the same
-   way `protocol`'s existing commands were ported from something-x, and wire
-   up a gestures screen.
-4. **Explicitly out of scope** — flagged to the user directly: Spatial
-   Audio/360/head tracking and Bixby voice commands are Samsung Galaxy Buds
-   features with no Nothing/CMF protocol equivalent in either source repo.
-   Don't build fake toggles for these.
-5. Tile is still read-only (no live RFCOMM connection of its own) — v2 item
+2. ~~Add the settings screen (in-ear detection, low latency, personalized
+   ANC, bass enhance, find-my-earbuds, ear fit test, gesture count)~~ — done
+   this round, real mined commands (see CLAUDE.md), **not yet built/run**.
+3. **Build and verify this round's changes on device.** New risk this time:
+   `SettingsScreen.kt` uses Wear Compose Material's `ToggleChip` for the
+   first time in this project — every other Compose widget used so far
+   (`Chip`, `ListHeader`, `ScalingLazyColumn`) has been through a real CI
+   build, `ToggleChip`'s exact parameter shape (`secondaryLabel` position,
+   `toggleControl` requirement) has not. Expect this to be the next thing
+   that needs a fix cycle, same as the Tile did.
+4. Confirm the newly-wired settings actually round-trip on CMF Buds Pro 2 —
+   only ANC has been confirmed on real hardware so far; battery/EQ/settings
+   are all still unconfirmed on CMF specifically.
+5. Gesture *editing* (not just the read-only count) — the per-gesture array
+   structure (`gestureDevice`/`gestureCommon`/`gestureType`/`gestureAction`)
+   needs real UI design, deferred from this pass.
+6. Custom EQ, CMF's separate Listening Mode command — see CLAUDE.md.
+7. Tile is still read-only (no live RFCOMM connection of its own) — v2 item
    is either a bound background service or the phone-relay transport wired
    to a Tile action for in-tile quick toggling.
-6. Launcher icon is still `ic_earbuds.xml` reused directly, no adaptive
-   mipmap set.
 
 ## Known limits
 
-- No adaptive launcher icon.
 - Tile has no live connection, no in-tile quick actions yet.
 - No SDP-based channel discovery, probe-list only.
 - `phone/` module is not functional — see its `MainActivity` doc comment.
+- No model/SKU detection, so settings commands aren't gated per-device the
+  way ear-web gates them (e.g. personalized ANC is Ear (2)-only in the
+  official app) — sending an unsupported command is assumed harmless but
+  that's inherited from the source material, not separately verified.
