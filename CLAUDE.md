@@ -641,6 +641,34 @@ Next step: an exported log from a phone-side repro — specifically whether
 drop) vs. `"recv loop: stream closed by peer"` / an I/O error (something
 else entirely).
 
+**Update (2026-09-22, same day)**: first real export from the rebuilt phone
+app (using the button above) shows a clean connect (channel 16, ~150ms)
+that then held for at least 10+ seconds with zero disconnect signal in the
+log — the opposite of the original report. Two live explanations, not yet
+distinguished: the original "~1s drop" was specific to the stale build the
+user was running before this session's fixes landed, or it just hadn't
+dropped yet by the time the log was exported. Also notable: that test
+connected via `MainActivity`'s own "Start relay" button on the phone, not
+through the watch's picker — no `onMessageReceived`/`CMD_CONNECT` lines in
+that capture confirm it. Still need: a connect initiated from the watch
+picker specifically, and a longer capture window to see whether it
+eventually drops.
+
+That same test surfaced a real, separate bug while investigating why the
+watch didn't show the phone as connected: the watch's `WearRelayTransport`
+only started listening for phone state *after* the phone had already
+connected and pushed it, and `DataClient.addListener()` only fires on
+*future* changes — it doesn't replay the current value to a listener that
+subscribes late. So even doing this correctly (phone connects, then user
+opens the relay picker on the watch) would have shown nothing on the watch
+until the *next* state change. Fixed: `WearRelayTransport.init` now also
+does a one-time `dataClient.dataItems` read on creation to catch up on
+whatever's already there, in addition to registering the live listener —
+see `fetchCurrentState()`. **Unverified** — logic reasoned from the
+DataClient API contract (`addListener` is future-only, well-documented
+GMS behavior), not yet confirmed against a real "phone already connected,
+then open the watch picker" repro.
+
 ## Icons and branding
 
 `wear/src/main/res/drawable/ic_anc_*.xml`, `ic_arrow_right.xml`, `ic_back.xml`

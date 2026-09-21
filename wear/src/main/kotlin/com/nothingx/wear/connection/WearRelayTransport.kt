@@ -75,6 +75,34 @@ class WearRelayTransport(context: Context) : EarbudsTransport {
 
     init {
         dataClient.addListener(dataListener)
+        // addListener() only fires on a FUTURE change — if the phone already
+        // connected and pushed state before this transport was created (e.g.
+        // the phone side was started from its own UI, or from
+        // AutoRelayReceiver, before the user ever opened the relay picker on
+        // the watch), that state would otherwise sit unseen until the next
+        // actual change. Read whatever's already there once, on creation.
+        fetchCurrentState()
+    }
+
+    private fun fetchCurrentState() {
+        dataClient.dataItems
+            .addOnSuccessListener { buffer ->
+                for (item in buffer) {
+                    val map = DataMapItem.fromDataItem(item).dataMap
+                    when (item.uri.path) {
+                        RelayPaths.DATA_DEVICE_STATE -> {
+                            Log.i(TAG, "fetchCurrentState: found existing DATA_DEVICE_STATE")
+                            _deviceState.value = RelayCodec.deviceStateFromDataMap(map)
+                        }
+                        RelayPaths.DATA_CONNECTION_STATE -> {
+                            Log.i(TAG, "fetchCurrentState: found existing DATA_CONNECTION_STATE: ${map.getString("kind")}")
+                            _connectionState.value = RelayCodec.connectionStateFromDataMap(map)
+                        }
+                    }
+                }
+                buffer.release()
+            }
+            .addOnFailureListener { e -> Log.w(TAG, "fetchCurrentState failed: ${e.message}") }
     }
 
     /** Stops listening for phone state pushes. Does not disconnect the phone's own RFCOMM link. */
