@@ -1,16 +1,22 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.nothingx.wear"
-    compileSdk = 34
+    compileSdk = 37 // Wear Widgets require compileSdk 37 (see settings.gradle.kts)
 
     defaultConfig {
         applicationId = "com.nothingx.wear"
-        minSdk = 30 // Wear OS 3 (Galaxy Watch 4 and newer)
-        targetSdk = 34
+        minSdk = 30 // Wear OS 3 (Galaxy Watch 4 and newer) — the app itself still
+        // supports this; Wear Widgets specifically need a newer on-device
+        // renderer and simply won't show on older Wear OS 3 watches. The
+        // full-screen Tile (NothingXTileService) stays as the fallback for
+        // those, per both Google's own migration guidance and the user's
+        // explicit ask to keep it for older watches.
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -36,12 +42,10 @@ android {
     buildFeatures {
         compose = true
     }
-    composeOptions {
-        // Compose compiler version matched to Kotlin 1.9.24 per the Jetpack
-        // Compose-to-Kotlin compatibility map. Kotlin 2.0+ would use the
-        // org.jetbrains.kotlin.plugin.compose Gradle plugin instead of this.
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+    // No composeOptions{} block anymore: on Kotlin 2.0+ the Compose compiler
+    // version comes from the org.jetbrains.kotlin.plugin.compose Gradle
+    // plugin (applied above) instead — using both at once is the trap this
+    // used to warn about.
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -62,7 +66,15 @@ dependencies {
     implementation(project(":protocol"))
     implementation(project(":bluetooth"))
 
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    // Bumped 2026-09-21 for the AGP 9 / Kotlin 2.2.10 toolchain jump (Wear
+    // Widgets need compileSdk 37, which needs AGP 9.1+, which needs KGP
+    // 2.2.10+ — see settings.gradle.kts). Picked stable versions aligned
+    // with that Kotlin version, not bleeding-edge/beta ones, so this
+    // migration isn't stacking even more unknowns on top of the required
+    // ones. Existing screens (ToggleChip, InlineSlider, etc.) run on these
+    // same androidx.wear.compose APIs — Wear Widgets are a separate stack
+    // (Glance for Wear + RemoteCompose, added alongside these, not instead).
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -71,9 +83,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
 
     // Wear-specific Compose + Material3, and Horologist for round-screen scaffolding.
-    implementation("androidx.wear.compose:compose-material:1.3.1")
-    implementation("androidx.wear.compose:compose-foundation:1.3.1")
-    implementation("androidx.wear.compose:compose-navigation:1.3.1")
+    implementation("androidx.wear.compose:compose-material:1.6.2")
+    implementation("androidx.wear.compose:compose-foundation:1.6.2")
+    implementation("androidx.wear.compose:compose-navigation:1.6.2")
     implementation("com.google.android.horologist:horologist-compose-layout:0.6.11")
 
     // Tiles (ProtoLayout) for the quick-glance ANC/battery tile.

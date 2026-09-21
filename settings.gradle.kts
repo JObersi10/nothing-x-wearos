@@ -10,15 +10,20 @@ pluginManagement {
     // it a hard error. Root build.gradle.kts still declares none of these
     // itself (see its own comment) — that's what lets `:protocol:test` build
     // standalone in network-restricted sandboxes without ever resolving AGP.
+    //
+    // AGP 9.1.1 / Kotlin 2.2.10 (bumped 2026-09-21 for Wear Widgets, which
+    // require compileSdk 37 — AGP 9.1.0+ is the minimum that supports it).
+    // This forced the Kotlin 1.9->2.x jump too (AGP 9 requires KGP 2.2.10+),
+    // which is also why wear/build.gradle.kts now uses the
+    // org.jetbrains.kotlin.plugin.compose Gradle plugin instead of
+    // composeOptions{} — exactly the contingency this comment used to warn
+    // about ("if Kotlin ever gets bumped to 2.0+, switch to the plugin").
     plugins {
-        id("com.android.application") version "8.5.2"
-        id("com.android.library") version "8.5.2"
-        id("org.jetbrains.kotlin.android") version "1.9.24"
-        id("org.jetbrains.kotlin.jvm") version "1.9.24"
-        // No org.jetbrains.kotlin.plugin.compose here: that standalone Compose
-        // compiler plugin only exists from Kotlin 2.0+. On 1.9.24 (what this
-        // project uses), the Compose compiler version is set via `composeOptions`
-        // in the Android block instead — see wear/build.gradle.kts.
+        id("com.android.application") version "9.1.1"
+        id("com.android.library") version "9.1.1"
+        id("org.jetbrains.kotlin.android") version "2.2.10"
+        id("org.jetbrains.kotlin.jvm") version "2.2.10"
+        id("org.jetbrains.kotlin.plugin.compose") version "2.2.10"
     }
 }
 

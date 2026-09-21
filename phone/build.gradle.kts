@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.nothingx.phone"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.nothingx.phone"
@@ -14,7 +14,7 @@ android {
         // dependency declares. 30 is still a perfectly normal phone minSdk
         // (Android 11+).
         minSdk = 30
-        targetSdk = 34
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
     }

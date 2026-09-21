@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.nothingx.bluetooth"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 30 // Wear OS 3 baseline (Galaxy Watch 4 and newer)

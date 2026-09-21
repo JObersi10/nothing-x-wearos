@@ -57,6 +57,43 @@ by moving the plugin versions back to root — it silently breaks
 `:protocol:test` in any AGP-resolution-restricted environment, CI included if
 that ever changes.
 
+### Toolchain: AGP 9.1.1 / Kotlin 2.2.10 / compileSdk 37 (bumped 2026-09-21)
+
+Forced by Wear Widgets, which need compileSdk 37 — that in turn needs AGP
+9.1.0+ (confirmed via Android's own AGP release notes, not guessed), which
+in turn requires KGP 2.2.10+. One feature request cascaded into four
+major-version bumps (Gradle wrapper 8.7→9.3.1, AGP 8.5.2→9.1.1, Kotlin
+1.9.24→2.2.10, compileSdk/targetSdk 34→37) touching nearly every build file.
+Done as an isolated commit with zero new feature code, specifically so a
+regression from the toolchain jump wouldn't be tangled up with a regression
+from new widget code — if CI goes red right after this, the bisect is
+trivial.
+
+Consequences, some already anticipated by older comments in this file:
+- **Compose compiler is now the `org.jetbrains.kotlin.plugin.compose`
+  Gradle plugin, not `composeOptions{}`** — this was already flagged as
+  the "when Kotlin hits 2.0+" contingency; it happened.
+- `compose-bom` bumped 2024.06.00 → 2026.09.00, `androidx.wear.compose.*`
+  1.3.1 → 1.6.2 (a stable version, not the 1.7.0 beta channel that existed
+  at the time) — needed because a compiler this many Kotlin versions newer
+  than the old Compose runtime libraries is a real ABI mismatch risk, not
+  because the widget feature itself needs newer chip/slider APIs. The
+  existing screens (`ToggleChip`, `InlineSlider`, etc.) still use these
+  same `androidx.wear.compose.material` APIs — Wear Widgets are a
+  completely separate rendering stack (Glance for Wear + RemoteCompose),
+  added alongside, not instead.
+- `wear`'s `minSdk` stays at 30 (Wear OS 3) — Wear Widgets need Wear OS 4+
+  on-device, but per the official Google sample's own README, the library
+  **automatically falls back to rendering as a full-screen Tile on
+  unsupported devices**, which is exactly the "still works on older
+  watches" behavior asked for. Whether this needs the app's `minSdk` to
+  rise to 33 (some Glance-for-Wear artifacts may declare that as their own
+  floor) is **not yet confirmed** — if a future build fails with the
+  familiar `uses-sdk:minSdkVersion X cannot be smaller than version Y
+  declared in library Z` error (same shape as the `phone`/`bluetooth`
+  minSdk mismatch fixed earlier), that's this exact tradeoff surfacing for
+  real, not a new bug.
+
 ### Why `protocol`'s Kotlin JVM toolchain is 21, not 17
 
 The Android modules target JDK 17 (AGP 8.5 requirement zone). `protocol` was
