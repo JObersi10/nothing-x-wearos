@@ -1,12 +1,14 @@
 package com.nothingx.wear.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -15,8 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,7 +28,6 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.nothingx.bluetooth.ConnectionState
 import com.nothingx.protocol.AncMode
-import com.nothingx.wear.R
 import com.nothingx.wear.data.DeviceViewModel
 
 @Composable
@@ -80,6 +80,22 @@ fun DeviceDetailScreen(
             )
         }
 
+        // Battery first per user request — it's the thing people check most.
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colors.surface)
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                BatterySlot(letter = "L", percent = deviceState.leftBattery)
+                BatterySlot(letter = "C", percent = deviceState.caseBattery)
+                BatterySlot(letter = "R", percent = deviceState.rightBattery)
+            }
+        }
+
         // Dark elevated card per feature area — the Nothing X app's own layout
         // language (title + status line, grouped in a rounded dark card),
         // adapted for a round screen rather than copied from the phone layout.
@@ -113,21 +129,6 @@ fun DeviceDetailScreen(
             }
         }
 
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(MaterialTheme.colors.surface)
-                    .padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                BatterySlot(iconRes = R.drawable.ic_bud, mirrored = false, percent = deviceState.leftBattery)
-                BatterySlot(iconRes = R.drawable.ic_case, mirrored = false, percent = deviceState.caseBattery)
-                BatterySlot(iconRes = R.drawable.ic_bud, mirrored = true, percent = deviceState.rightBattery)
-            }
-        }
-
         // EQ UI intentionally left out for now (not a priority) — the protocol
         // and viewModel.setEqPreset() plumbing is still there if this comes back.
 
@@ -141,19 +142,23 @@ fun DeviceDetailScreen(
     }
 }
 
+// Letter badge instead of custom earbud/case pictograms — those were
+// hand-drawn vector paths that never got visually checked before shipping,
+// and looked it. Text always renders correctly; a circle + bold letter reads
+// clearly at watch size and needs no art to get right.
 @Composable
-private fun BatterySlot(iconRes: Int, mirrored: Boolean, percent: Int) {
+private fun BatterySlot(letter: String, percent: Int) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // Image, not Icon: ic_case.xml layers a black "cutout" hinge line and
-        // LED dot over its white body, which Icon's uniform tint would flatten
-        // away. Image renders the vector's own per-path colors as authored.
-        Image(
-            painter = painterResource(iconRes),
-            contentDescription = null,
+        Box(
             modifier = Modifier
-                .padding(bottom = 2.dp)
-                .scale(scaleX = if (mirrored) -1f else 1f, scaleY = 1f),
-        )
+                .padding(bottom = 4.dp)
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colors.primary),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = letter, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
         Text(text = percentOrDash(percent), fontSize = 13.sp)
     }
 }

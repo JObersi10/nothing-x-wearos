@@ -212,7 +212,13 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
 
     private suspend fun dispatchFrames(frames: List<Frame>) {
         for (frame in frames) {
-            Log.d(TAG, "RX cmd=0x${frame.cmd.toString(16)} payload=${frame.payload.toHexString()}")
+            // isLoggable guard: the hex-dump formatting itself (toHexString's
+            // per-byte String.format allocations) ran unconditionally before,
+            // on every single RX frame, even with logcat not attached — real,
+            // if modest, CPU/allocation overhead on every command exchange.
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "RX cmd=0x${frame.cmd.toString(16)} payload=${frame.payload.toHexString()}")
+            }
             val followUps = session.handleFrame(frame)
             _deviceState.value = session.state
             for (cmd in followUps) {
@@ -229,7 +235,9 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
         writeMutex.withLock {
             fsn = (fsn + 1) and 0xFF
             val frame = FrameEncoder.encode(command.cmd, command.payload, fsn)
-            Log.d(TAG, "TX cmd=0x${command.cmd.toString(16)} ${command.label} ${frame.toHexString()}")
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "TX cmd=0x${command.cmd.toString(16)} ${command.label} ${frame.toHexString()}")
+            }
             withContext(Dispatchers.IO) {
                 try {
                     out.write(frame)
