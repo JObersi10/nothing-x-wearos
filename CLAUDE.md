@@ -349,20 +349,56 @@ the earbuds go out of range while the service is running in the background
 — it'll sit disconnected until the app is reopened or the Tile is tapped
 again.
 
-### `phone/` module — relay path implemented (2026-09-21)
+### `phone/` module — relay path, rewritten for real automatic use (2026-09-22)
 
-No longer a scaffold. `PhoneRelayService` (phone-side foreground service,
-`connectedDevice` type) holds a real `DirectRfcommTransport` connection to
-the earbuds — the phone's own normal Classic Bluetooth pairing, same
-transport class the watch uses for direct connect, just running on the
-other device — and relays commands/state to and from the watch over the
-Wearable Data Layer API. `MainActivity` lists bonded matched devices
-(reusing `BondedDevices`/`NothingDeviceMatcher` from `:bluetooth`) and lets
-the user tap one to start relaying, or stop it.
+The first cut of this (2026-09-21) worked in CI but the user's actual
+hardware pass on it found it "confusingly made" and just not working — a
+Settings toggle that needed an app restart, a phone app the user had to
+manually open and tap a device in, and a watch that had to already know the
+real Bluetooth MAC to relay to. Rewritten around "tap Buds (phone) on the
+watch and it just works, no phone interaction needed":
 
-Wire format lives in `:bluetooth`'s `relay/RelayProtocol.kt`
-(`RelayPaths` + `RelayCodec`), shared by both sides since both already
-depend on `:bluetooth`:
+- **`PhoneRelayService` is now a `WearableListenerService`**, not a plain
+  `Service` with a live `MessageClient.OnMessageReceivedListener`. That's
+  the documented mechanism (see the manifest's `MESSAGE_RECEIVED`
+  intent-filter with `pathPrefix="/nothingx/cmd"`) for Play Services to wake
+  the phone app's process and start this service on an incoming relay
+  command even when the phone app was never opened — a plain listener only
+  fires while something else already keeps the process alive, which is
+  exactly why the first version needed the user to open the app first.
+  (`BIND_LISTENER`, the older/simpler intent-filter action, is deprecated —
+  confirmed via a live search against Android's own deprecation notice, not
+  assumed — `MESSAGE_RECEIVED`/`DATA_CHANGED` are the current mechanism.)
+- **`AutoRelayReceiver`** (new) starts `PhoneRelayService` proactively the
+  moment the phone's own Bluetooth connects to a matched Nothing/CMF
+  device (`BluetoothDevice.ACTION_ACL_CONNECTED`), no watch or phone
+  interaction at all — covers the common case of just wearing the earbuds
+  normally. `ACTION_ACL_CONNECTED` is on Android's exempted-implicit-
+  broadcast list, so a manifest-declared receiver gets it even with the app
+  process dead, the same way `BOOT_COMPLETED` works.
+- **The watch no longer needs to know a real Bluetooth MAC to relay to.**
+  `RelayCodec.encodeConnect("")` (blank) means "use whatever matched device
+  is already paired to the phone" — `PhoneRelayService` resolves that
+  itself via `BondedDevices`/`NothingDeviceMatcher`, same list the phone's
+  own `MainActivity` shows. This is what let the Settings toggle disappear
+  entirely.
+- **The Settings "Use phone relay" toggle (and `TransportModePrefs`) are
+  gone.** Relay vs. direct is now a normal per-connection choice, not a
+  restart-required global setting: `DeviceListScreen` always shows a
+  `Buds (phone)` entry alongside the real bonded devices (sentinel address
+  `EarbudsConnectionHolder.RELAY_TARGET_ADDRESS`), and tapping it behaves
+  exactly like tapping a real device.
+- **`EarbudsConnectionHolder` now holds both transports at once** (lazily)
+  and exposes ONE stable pair of `connectionState`/`deviceState` flows that
+  it forwards from whichever transport is currently active (`activate()`
+  re-points an internal collector job rather than swapping the flow
+  identity) — this is what actually solves the "stale `StateFlow`
+  reference" problem the old toggle-needs-restart design was working
+  around, not just papering over it. `DeviceViewModel` captures these flows
+  once, safely, because they never change identity.
+
+Wire format is unchanged, still in `:bluetooth`'s `relay/RelayProtocol.kt`
+(`RelayPaths` + `RelayCodec`):
 - **Commands** (watch → phone) go over `MessageClient`, fire-and-forget —
   matching `DirectRfcommTransport.sendCommand`'s own no-ack semantics; the
   real protocol ack, if any, comes back as a state push, not a Data Layer
@@ -374,28 +410,72 @@ depend on `:bluetooth`:
   polling, no re-pushing unchanged state. This is the "optimizations are
   key" requirement actually built in, not just claimed.
 
-Watch side: `WearRelayTransport` (`wear/.../connection/`) implements the
-same `EarbudsTransport` interface as `DirectRfcommTransport`, so nothing
-above it (`EarbudsConnectionHolder`, the UI, the Tile) needs to know which
-is active. Which one `EarbudsConnectionHolder.init()` constructs is decided
-by `TransportModePrefs` (plain synchronous `SharedPreferences`, not the
-DataStore-backed `DevicePrefs` — deliberately, since `init()` is called
-from several non-suspend entry points and a synchronous read avoids
-threading that). **Switching the toggle in Settings ("Use phone relay")
-takes effect on the next app/process start, not live** — there's no
-hot-swap of an already-collected `StateFlow` reference. Settings' toggle
-says this explicitly (toast on change) rather than silently doing nothing;
-don't try to make it a live switch without also solving the
-stale-StateFlow-reference problem that creates in `DeviceViewModel`.
+**Unverified**: still hasn't touched real hardware in this exact rewritten
+form (the previous version did reach hardware and the user reported it
+confusing/non-functional — see the bug-fix pass note below for the full
+list of what that hardware round surfaced). Needs a fresh on-device round:
+does `AutoRelayReceiver` actually fire on a real ACL connect, does the
+`WearableListenerService` wake-up actually work with the phone app fully
+killed, does the blank-address auto-pick resolve correctly when more than
+one matched device is bonded.
 
-**Unverified**: none of this has touched real hardware. The whole relay
-path — phone-side connect, command relay both directions, state sync,
-notification lifecycle, the watch/phone Data Layer pairing itself — needs
-an on-device round with both apps installed on a watch+phone pair that are
-actually paired via the Wear OS companion app. `MainActivity`'s device
-picker is intentionally minimal (list + tap, no polling/rescanning beyond
-an explicit refresh button) — don't read that as feature-complete phone UX,
-it's the minimum needed to start/stop the relay service.
+### First real hardware feedback round — six bugs, mostly one root cause (2026-09-22)
+
+The compileSdk 37 + phone relay build actually reached the user's watch this
+time. Reported: app auto-opening the earbuds screen while *trying* to
+connect (should wait for an actual connect); no icons visible anywhere in
+the UI; Find My Earbuds not working; the app staying "Connected" after the
+earbuds were disconnected from Bluetooth audio; endless reconnect
+notifications after leaving the earbuds at home; battery showing a stale
+last-synced value forever; and the phone relay not working at all, plus
+being confusing to use (covered above).
+
+Three of those six — stale "Connected" status, dead Find My Earbuds, stuck
+battery — trace to the same root cause: `DirectRfcommTransport`'s blocking
+`InputStream.read()` doesn't reliably throw promptly when the peer's ACL
+link actually drops. The app kept reporting "Connected" long after the
+earbuds were gone, so nothing ever re-queried battery, nothing ever
+reconnected, and commands sent over the stale socket were either silently
+dropped or just had no effect. Fixed by listening for the system's own
+`BluetoothDevice.ACTION_ACL_DISCONNECTED` (scoped to the exact device
+address) and force-closing the socket the moment it fires, instead of
+waiting for the socket to notice on its own. This is shared by both the
+watch's direct connect and the phone relay's own `DirectRfcommTransport`
+instance, so it fixes the same class of bug on both paths at once.
+
+That fix alone would still have left a real gap: once genuinely
+disconnected, nothing tried to reconnect. `EarbudsConnectionHolder` now has
+bounded, backed-off reconnect (5s/15s/30s/60s, then gives up and requires
+an explicit retry) — bounded specifically because the "endless
+notifications" complaint is exactly what an *unbounded* retry loop would
+cause every time the earbuds are simply left at home. Whether this was
+actually the cause of the endless-notification report (vs. something in
+Android's own Bluetooth stack repeatedly prompting) is unconfirmed — the
+prompt disappearing is the thing to check on the next hardware round.
+
+The other three:
+- **Auto-open only on actual connect, not on connect attempt**: `MainActivity`
+  now navigates to the device detail screen from a `LaunchedEffect` watching
+  `connectionState`, not from the device-list tap handler directly. Tapping
+  a device (or resuming the last one automatically on app open — new, see
+  `DeviceViewModel.init`) starts a connection and shows a toast; navigation
+  only happens once `connectionState` is actually `Connected`.
+- **Icons**: `ic_earbuds.xml` existed but was never actually placed in any
+  Compose screen — only referenced by the notification icon and Tile
+  preview metadata. Added as a leading icon on every `DeviceListScreen`
+  chip and as a header icon on `DeviceDetailScreen`.
+- **Find My Earbuds**: no code bug found in `ringBuds()`/`RING_BUDS` itself
+  (payload structure matches ear-web's own send() calls, same as every
+  other mined command) — most likely explained by the same stale-connection
+  root cause above (command silently dropped on a socket the app thought
+  was live). Also added raw-frame RX logging (`DirectRfcommTransport`, DEBUG
+  level) — the "not implemented yet" debug logging CLAUDE.md flagged
+  earlier — so a repro capture can confirm or rule this out for real if
+  it's still broken after the reconnect fix.
+
+None of this round has touched real hardware yet — it's a direct response
+to a hardware bug report, but the fixes themselves are unverified until the
+next round confirms them.
 
 ## Icons and branding
 

@@ -4,17 +4,16 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
+import com.google.android.gms.wearable.WearableListenerService
+import com.nothingx.bluetooth.BondedDevices
 import com.nothingx.bluetooth.ConnectionState
 import com.nothingx.bluetooth.DirectRfcommTransport
 import com.nothingx.bluetooth.EarbudsTransport
@@ -40,39 +39,101 @@ private const val NOTIFICATION_ID = 2
  * (see `RelayProtocol.kt` in :bluetooth for the wire format and why
  * MessageClient vs DataClient were each picked).
  *
- * Off by default: only runs while the user has turned relay mode on from
- * `MainActivity`. A foreground service (`connectedDevice` type) the whole
- * time it's on — same pattern as the watch's own
- * `EarbudsConnectionService` — so the process survives in the background
- * without needing to poll for anything; state only gets pushed to the
- * watch when it actually changes, not on a timer.
+ * A [WearableListenerService], not a plain [android.app.Service] — that's
+ * what lets Play Services wake this app's process on an incoming relay
+ * command even if it's not running and the user never opened the phone app
+ * (the manifest declares the `MESSAGE_RECEIVED` intent-filter Play Services
+ * looks for). This is what actually makes "tap Buds (phone) on the watch
+ * and it just works" true rather than requiring the phone app to already be
+ * open — a plain bound `MessageClient.OnMessageReceivedListener`, the first
+ * version of this class used, only fires while something already keeps the
+ * service alive.
+ *
+ * Two independent ways relaying starts, both converging on the same
+ * [transport]/foreground-service instance:
+ *  - [AutoRelayReceiver] starts this service proactively as soon as the
+ *    phone's own Bluetooth connects to a matched earbuds device — no watch
+ *    or phone interaction needed at all, covers the common case where the
+ *    earbuds are just worn normally.
+ *  - A `CMD_CONNECT` message from the watch (this class's [onMessageReceived])
+ *    starts it on demand if it isn't already running. A blank address in
+ *    that message (see [EarbudsConnectionHolder] on the watch side) means
+ *    "figure out which paired device to use" rather than the watch needing
+ *    to already know a real Bluetooth MAC — it just picks the first matched
+ *    bonded device, same as [AutoRelayReceiver].
+ *  - [MainActivity]'s manual Start/Stop buttons remain as an explicit
+ *    override for either case.
  */
-class PhoneRelayService : Service() {
+class PhoneRelayService : WearableListenerService() {
     private val scope = CoroutineScope(SupervisorJob())
     private var transport: EarbudsTransport? = null
     private var stateJob: Job? = null
-    private lateinit var messageClient: MessageClient
-
-    private val messageListener = MessageClient.OnMessageReceivedListener { event -> handleMessage(event) }
+    private var foregroundStarted = false
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannelIfNeeded()
-        startForeground(NOTIFICATION_ID, buildNotification("Relay starting…"))
-        messageClient = Wearable.getMessageClient(this)
-        messageClient.addListener(messageListener)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val t = transport ?: DirectRfcommTransport(this).also {
-            transport = it
-            observeState(it)
-        }
+        ensureForeground()
+        val t = transportOrCreate()
         val address = intent?.getStringExtra(EXTRA_ADDRESS)
         if (address != null) {
             scope.launch { t.connect(address) }
         }
         return START_STICKY
+    }
+
+    override fun onMessageReceived(event: MessageEvent) {
+        ensureForeground()
+        val t = transportOrCreate()
+        scope.launch {
+            when (event.path) {
+                RelayPaths.CMD_CONNECT -> {
+                    val requested = RelayCodec.decodeConnect(event.data)
+                    val target = requested.ifBlank { firstMatchedBondedAddress() }
+                    if (target != null) {
+                        t.connect(target)
+                    } else {
+                        Log.w(TAG, "CMD_CONNECT: no address given and no matched bonded device found")
+                    }
+                }
+                RelayPaths.CMD_DISCONNECT -> t.disconnect()
+                RelayPaths.CMD_SET_ANC_MODE -> t.setAncMode(RelayCodec.decodeAncMode(event.data))
+                RelayPaths.CMD_SET_EQ_PRESET -> t.setEqPreset(RelayCodec.decodeEqPreset(event.data))
+                RelayPaths.CMD_QUERY_SETTINGS -> t.querySettings()
+                RelayPaths.CMD_SET_IN_EAR_DETECTION -> t.setInEarDetection(RelayCodec.decodeBool(event.data))
+                RelayPaths.CMD_SET_LOW_LATENCY -> t.setLowLatency(RelayCodec.decodeBool(event.data))
+                RelayPaths.CMD_SET_PERSONALIZED_ANC -> t.setPersonalizedAnc(RelayCodec.decodeBool(event.data))
+                RelayPaths.CMD_SET_BASS_ENHANCE -> {
+                    val (enabled, level) = RelayCodec.decodeBassEnhance(event.data)
+                    t.setBassEnhance(enabled, level)
+                }
+                RelayPaths.CMD_RING_BUDS -> {
+                    val (ring, isLeft) = RelayCodec.decodeRingBuds(event.data)
+                    t.ringBuds(ring, isLeft)
+                }
+                RelayPaths.CMD_LAUNCH_EAR_FIT_TEST -> t.launchEarFitTest()
+                else -> Log.w(TAG, "unknown relay command path ${event.path}")
+            }
+        }
+    }
+
+    private fun firstMatchedBondedAddress(): String? =
+        BondedDevices.list(this).firstOrNull { it.isSupported }?.address
+
+    private fun transportOrCreate(): EarbudsTransport {
+        return transport ?: DirectRfcommTransport(this).also {
+            transport = it
+            observeState(it)
+        }
+    }
+
+    private fun ensureForeground() {
+        if (foregroundStarted) return
+        foregroundStarted = true
+        startForeground(NOTIFICATION_ID, buildNotification("Relay starting…"))
     }
 
     private fun observeState(t: EarbudsTransport) {
@@ -104,35 +165,6 @@ class PhoneRelayService : Service() {
         }.asPutDataRequest().setUrgent()
         Wearable.getDataClient(this).putDataItem(request)
             .addOnFailureListener { e -> Log.w(TAG, "pushConnectionState failed: ${e.message}") }
-    }
-
-    private fun handleMessage(event: MessageEvent) {
-        val t = transport ?: run {
-            Log.w(TAG, "handleMessage(${event.path}): relay service has no transport yet")
-            return
-        }
-        scope.launch {
-            when (event.path) {
-                RelayPaths.CMD_CONNECT -> t.connect(RelayCodec.decodeConnect(event.data))
-                RelayPaths.CMD_DISCONNECT -> t.disconnect()
-                RelayPaths.CMD_SET_ANC_MODE -> t.setAncMode(RelayCodec.decodeAncMode(event.data))
-                RelayPaths.CMD_SET_EQ_PRESET -> t.setEqPreset(RelayCodec.decodeEqPreset(event.data))
-                RelayPaths.CMD_QUERY_SETTINGS -> t.querySettings()
-                RelayPaths.CMD_SET_IN_EAR_DETECTION -> t.setInEarDetection(RelayCodec.decodeBool(event.data))
-                RelayPaths.CMD_SET_LOW_LATENCY -> t.setLowLatency(RelayCodec.decodeBool(event.data))
-                RelayPaths.CMD_SET_PERSONALIZED_ANC -> t.setPersonalizedAnc(RelayCodec.decodeBool(event.data))
-                RelayPaths.CMD_SET_BASS_ENHANCE -> {
-                    val (enabled, level) = RelayCodec.decodeBassEnhance(event.data)
-                    t.setBassEnhance(enabled, level)
-                }
-                RelayPaths.CMD_RING_BUDS -> {
-                    val (ring, isLeft) = RelayCodec.decodeRingBuds(event.data)
-                    t.ringBuds(ring, isLeft)
-                }
-                RelayPaths.CMD_LAUNCH_EAR_FIT_TEST -> t.launchEarFitTest()
-                else -> Log.w(TAG, "unknown relay command path ${event.path}")
-            }
-        }
     }
 
     private fun statusText(state: ConnectionState): String = when (state) {
@@ -169,14 +201,11 @@ class PhoneRelayService : Service() {
     private fun notificationManager() = getSystemService(NotificationManager::class.java)
 
     override fun onDestroy() {
-        messageClient.removeListener(messageListener)
         stateJob?.cancel()
         val t = transport
         if (t != null) scope.launch { t.disconnect() }
         super.onDestroy()
     }
-
-    override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
         const val EXTRA_ADDRESS = "address"

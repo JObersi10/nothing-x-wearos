@@ -5,10 +5,14 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import com.nothingx.protocol.AncMode
 import com.nothingx.protocol.Commands
 import com.nothingx.protocol.DeviceState
@@ -48,7 +52,10 @@ private const val TAG = "NothingX"
  * this class's doc comment used to flag as unconfirmed.
  *
  * All logging in this class uses tag "$TAG" — `adb logcat -s $TAG:V` to
- * follow a connection attempt live.
+ * follow a connection attempt live. Every RX frame is dumped as raw hex
+ * before parsing (at DEBUG level) so a hardware capture can confirm or
+ * correct command IDs without guessing — the "raw frame debug logging"
+ * CLAUDE.md flagged as not implemented yet.
  */
 class DirectRfcommTransport(context: Context) : EarbudsTransport {
     private val appContext = context.applicationContext
@@ -61,6 +68,20 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
     private var output: OutputStream? = null
     private var fsn: Int = 0
     private val writeMutex = Mutex()
+
+    // A raw RFCOMM socket's blocking read() doesn't reliably throw promptly
+    // when the peer's ACL link actually drops (e.g. earbuds taken out of
+    // range, or the user disconnects them from the phone/watch's Bluetooth
+    // settings) — on some stacks it can sit blocked for a long OS-level
+    // timeout before noticing. That left the app reporting "Connected" long
+    // after the earbuds were actually gone: stale battery, dead commands
+    // (Find My Earbuds, ANC) silently dropped, no reconnect ever triggered.
+    // Listening for the system's own ACTION_ACL_DISCONNECTED and force-
+    // closing the socket the moment it fires for this exact device is what
+    // actually detects a real-world disconnect promptly, instead of relying
+    // on the socket noticing on its own.
+    private var aclReceiver: BroadcastReceiver? = null
+    private var aclTargetAddress: String? = null
 
     private val session = EarbudsSession()
 
@@ -90,6 +111,8 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
                 return@launch
             }
 
+            registerAclReceiver(address)
+
             var tried = 0
             for (channel in PROBE_CHANNELS) {
                 tried++
@@ -108,6 +131,7 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
                 }
             }
             Log.w(TAG, "no channel responded after ${PROBE_CHANNELS.size} attempts")
+            unregisterAclReceiver()
             _connectionState.value = ConnectionState.Failed(
                 "No channel on $address responded to the Nothing protocol probe " +
                     "(tried ${PROBE_CHANNELS.size} channels). See DirectRfcommTransport's " +
@@ -198,6 +222,9 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
                     Log.i(TAG, "recv loop: stream closed by peer")
                     break
                 }
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
+                    Log.d(TAG, "RX raw ${buffer.copyOf(n).toHexString()}")
+                }
                 dispatchFrames(parser.feed(buffer.copyOf(n)))
             }
         } catch (e: IOException) {
@@ -207,6 +234,7 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
             closeQuietly(socket)
             socket = null
             output = null
+            unregisterAclReceiver()
         }
     }
 
@@ -253,10 +281,45 @@ class DirectRfcommTransport(context: Context) : EarbudsTransport {
     override suspend fun disconnect() {
         Log.i(TAG, "disconnect()")
         connectionJob?.cancel()
+        unregisterAclReceiver()
         closeQuietly(socket)
         socket = null
         output = null
         _connectionState.value = ConnectionState.Idle
+    }
+
+    private fun registerAclReceiver(address: String) {
+        unregisterAclReceiver()
+        aclTargetAddress = address
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val device = IntentCompat.getParcelableExtra(
+                    intent,
+                    BluetoothDevice.EXTRA_DEVICE,
+                    BluetoothDevice::class.java,
+                )
+                if (device?.address != aclTargetAddress) return
+                Log.i(TAG, "ACL disconnected from $aclTargetAddress — forcing socket closed")
+                closeQuietly(socket)
+            }
+        }
+        aclReceiver = receiver
+        ContextCompat.registerReceiver(
+            appContext,
+            receiver,
+            IntentFilter(BluetoothDevice.ACTION_ACL_DISCONNECTED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
+
+    private fun unregisterAclReceiver() {
+        val receiver = aclReceiver ?: return
+        aclReceiver = null
+        try {
+            appContext.unregisterReceiver(receiver)
+        } catch (e: IllegalArgumentException) {
+            // Already unregistered (e.g. disconnect() raced the receive loop's own cleanup) — fine.
+        }
     }
 
     override suspend fun setAncMode(mode: AncMode) {

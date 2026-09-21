@@ -27,14 +27,15 @@ private val REQUIRED_PERMISSIONS: Array<String> = buildList {
 private const val PERMISSION_REQUEST_CODE = 1
 
 /**
- * Phone-side companion app. Lets the user turn on relay mode: the phone
- * connects to the earbuds itself (over its own normal Classic Bluetooth
- * pairing) and [PhoneRelayService] relays commands/state to and from the
- * watch, for the watch/earbuds pairs where a direct watch connection
- * doesn't work. The watch still connects directly by default — this is
- * the fallback path, and stays fully off until the user explicitly starts
- * it here (see `TransportModePrefs` on the watch side for the matching
- * "use phone relay" toggle).
+ * Phone-side companion app for the relay path. Relaying now starts on its
+ * own — [com.nothingx.phone.relay.AutoRelayReceiver] fires
+ * [PhoneRelayService] the moment the phone's own Bluetooth connects to a
+ * matched earbuds device, and a `Buds (phone)` tap on the watch's device
+ * list wakes the service too if it isn't already running (see
+ * [PhoneRelayService]'s doc comment — it's a `WearableListenerService`
+ * specifically so that works without this app being open). This screen is
+ * now just a status view plus a manual override, not something the user
+ * needs to open every time.
  *
  * Plain [Activity], not AppCompatActivity: this had a real crash-on-launch
  * bug once already (AppCompatActivity requires a Theme.AppCompat
@@ -93,9 +94,9 @@ class MainActivity : Activity() {
         )
         root.addView(
             TextView(this).apply {
-                text = "The watch connects to your earbuds directly by default — this app is only " +
-                    "needed if you turn on \"Use phone relay\" in the watch app's Settings. " +
-                    "Pick a device below to start relaying."
+                text = "Relaying starts automatically once your earbuds are connected to this " +
+                    "phone, or as soon as you tap \"Buds (phone)\" on the watch. You only need " +
+                    "this screen to check status or to start/stop it manually."
                 setPadding(0, 0, 0, 32)
             },
         )

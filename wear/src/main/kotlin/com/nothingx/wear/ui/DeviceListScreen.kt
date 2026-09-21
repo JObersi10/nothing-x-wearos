@@ -3,6 +3,7 @@ package com.nothingx.wear.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -11,16 +12,28 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
+import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.ListHeader
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.nothingx.bluetooth.BondedDevice
+import com.nothingx.wear.R
+import com.nothingx.wear.connection.EarbudsConnectionHolder
 import com.nothingx.wear.data.DeviceViewModel
+
+/** Always-visible entry for the phone relay path — see EarbudsConnectionHolder's doc comment. */
+private val RELAY_DEVICE = BondedDevice(
+    name = "Buds (phone)",
+    address = EarbudsConnectionHolder.RELAY_TARGET_ADDRESS,
+    isSupported = true,
+    isUnverified = false,
+)
 
 @Composable
 fun DeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedDevice) -> Unit) {
@@ -67,21 +80,7 @@ fun DeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedDevice
             }
         }
         items(visible) { device ->
-            Chip(
-                onClick = { onDeviceSelected(device) },
-                label = {
-                    Text(
-                        if (device.isUnverified) "${device.name} (unverified)" else device.name,
-                    )
-                },
-                colors = ChipDefaults.chipColors(
-                    backgroundColor = if (device.isSupported) {
-                        MaterialTheme.colors.primary
-                    } else {
-                        MaterialTheme.colors.surface
-                    },
-                ),
-            )
+            DeviceChip(device, onClick = { onDeviceSelected(device) })
         }
         if (!showAll && supported.size != devices.size) {
             item {
@@ -92,5 +91,34 @@ fun DeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedDevice
                 )
             }
         }
+        item {
+            DeviceChip(RELAY_DEVICE, onClick = { onDeviceSelected(RELAY_DEVICE) })
+        }
     }
+}
+
+@Composable
+private fun DeviceChip(device: BondedDevice, onClick: () -> Unit) {
+    Chip(
+        onClick = onClick,
+        icon = {
+            Icon(
+                painter = painterResource(R.drawable.ic_earbuds),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+        },
+        label = {
+            Text(
+                if (device.isUnverified) "${device.name} (unverified)" else device.name,
+            )
+        },
+        colors = ChipDefaults.chipColors(
+            backgroundColor = if (device.isSupported) {
+                MaterialTheme.colors.primary
+            } else {
+                MaterialTheme.colors.surface
+            },
+        ),
+    )
 }

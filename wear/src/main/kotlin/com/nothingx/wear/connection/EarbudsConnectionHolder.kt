@@ -9,8 +9,12 @@ import com.nothingx.protocol.DeviceState
 import com.nothingx.protocol.EqPreset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -27,75 +31,166 @@ import kotlinx.coroutines.launch
  * round-trip) calls straight into this same connection instead of a
  * process-local one that would already be gone by the time the Tile is
  * tapped.
+ *
+ * Holds both a [DirectRfcommTransport] and a [WearRelayTransport], lazily,
+ * and exposes ONE stable pair of [connectionState]/[deviceState] flows that
+ * always mirror whichever is currently active — this is what makes picking
+ * relay vs. direct a normal per-connection choice (tap a different entry in
+ * the device list) instead of a restart-required global setting the way an
+ * earlier version of this required. [DeviceViewModel] captures these flows
+ * once, non-null, at construction; [activate] is how the active transport
+ * changes without leaving that reference stale — it re-points an internal
+ * forwarding job at the new transport's flows rather than swapping the
+ * flow identity itself.
  */
 object EarbudsConnectionHolder {
+    /** Sentinel "address" for the phone relay entry in the device list — see DeviceListScreen. */
+    const val RELAY_TARGET_ADDRESS = "relay"
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var transport: EarbudsTransport? = null
     private var appContext: Context? = null
 
-    val connectionState: StateFlow<ConnectionState>?
-        get() = transport?.connectionState
+    private var directTransport: DirectRfcommTransport? = null
+    private var relayTransport: WearRelayTransport? = null
+    private var activeTransport: EarbudsTransport? = null
+    private var forwardJob: Job? = null
 
-    val deviceState: StateFlow<DeviceState>?
-        get() = transport?.deviceState
+    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Idle)
+    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
-    fun init(context: Context) {
-        if (transport != null) return
-        val ctx = context.applicationContext
-        appContext = ctx
-        // Mode picked once per process, synchronously — see
-        // TransportModePrefs' doc comment for why this isn't a live toggle.
-        transport = if (TransportModePrefs.useRelay(ctx)) {
-            WearRelayTransport(ctx)
-        } else {
-            DirectRfcommTransport(ctx)
-        }
-    }
+    private val _deviceState = MutableStateFlow(DeviceState())
+    val deviceState: StateFlow<DeviceState> = _deviceState.asStateFlow()
 
     private var connectedAddress: String? = null
 
+    // Bounded, backed-off reconnect for the direct transport only — the relay
+    // path's reconnect is the phone's job (PhoneRelayService owns its own
+    // DirectRfcommTransport and gets this same fix there). Bounded on
+    // purpose: an earlier version had no reconnect logic at all, which left
+    // a stale "Connected" state forever once the earbuds actually dropped;
+    // an *unbounded* retry loop would trade that bug for a new one (endless
+    // background connection attempts every time the earbuds are simply out
+    // of range, e.g. left at home). Stopping after a few tries and requiring
+    // an explicit retry (reopen the app, tap the device again) is the
+    // middle ground.
+    private var reconnectJob: Job? = null
+    private var reconnectAttempts = 0
+    private val reconnectDelaysMs = longArrayOf(5_000, 15_000, 30_000, 60_000)
+
+    fun init(context: Context) {
+        if (appContext != null) return
+        appContext = context.applicationContext
+    }
+
+    private fun directTransport(): DirectRfcommTransport {
+        val ctx = appContext ?: error("EarbudsConnectionHolder.init() not called yet")
+        return directTransport ?: DirectRfcommTransport(ctx).also { directTransport = it }
+    }
+
+    private fun relayTransport(): WearRelayTransport {
+        val ctx = appContext ?: error("EarbudsConnectionHolder.init() not called yet")
+        return relayTransport ?: WearRelayTransport(ctx).also { relayTransport = it }
+    }
+
+    private fun activate(transport: EarbudsTransport) {
+        if (activeTransport === transport) return
+        activeTransport = transport
+        forwardJob?.cancel()
+        forwardJob = scope.launch {
+            launch { transport.connectionState.collect { _connectionState.value = it } }
+            launch { transport.deviceState.collect { _deviceState.value = it } }
+        }
+    }
+
+    /** [address] may be a real Bluetooth MAC (direct connect) or [RELAY_TARGET_ADDRESS]. */
     fun connect(address: String) {
-        if (connectedAddress == address) return
+        // Checked before touching reconnectJob: a redundant connect() call to
+        // the address we're already on (e.g. DeviceDetailScreen's own
+        // connect() safety-net firing after the list screen already started
+        // one) must be a true no-op — cancelling the reconnect watcher here
+        // unconditionally would silently kill it on every such call.
+        if (connectedAddress == address && activeTransport != null) return
+        reconnectJob?.cancel()
         connectedAddress = address
+        reconnectAttempts = 0
         val ctx = appContext ?: return
         init(ctx)
-        scope.launch { transport?.connect(address) }
+        if (address == RELAY_TARGET_ADDRESS) {
+            val t = relayTransport()
+            activate(t)
+            // Blank address = "whatever matched device is already paired to the
+            // phone" — the phone side now auto-detects it, so the watch doesn't
+            // need to know or carry a real target address at all. See
+            // PhoneRelayService's handling of a blank CMD_CONNECT payload.
+            scope.launch { t.connect("") }
+        } else {
+            val t = directTransport()
+            activate(t)
+            scope.launch { t.connect(address) }
+            observeForReconnect(t, address)
+        }
+    }
+
+    private fun observeForReconnect(transport: DirectRfcommTransport, address: String) {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            transport.connectionState.collect { state ->
+                when (state) {
+                    is ConnectionState.Connected -> reconnectAttempts = 0
+                    is ConnectionState.Disconnected, is ConnectionState.Failed -> {
+                        // Only retry if we still actually want this device connected
+                        // (not an explicit user disconnect() or a switch to a
+                        // different target, both of which change connectedAddress).
+                        if (connectedAddress != address) return@collect
+                        if (reconnectAttempts >= reconnectDelaysMs.size) return@collect
+                        val delayMs = reconnectDelaysMs[reconnectAttempts]
+                        reconnectAttempts++
+                        delay(delayMs)
+                        if (connectedAddress == address) transport.connect(address)
+                    }
+                    else -> {}
+                }
+            }
+        }
     }
 
     fun disconnect() {
         connectedAddress = null
-        scope.launch { transport?.disconnect() }
+        reconnectJob?.cancel()
+        reconnectAttempts = 0
+        val t = activeTransport
+        scope.launch { t?.disconnect() }
     }
 
     fun setAncMode(mode: AncMode) {
-        scope.launch { transport?.setAncMode(mode) }
+        scope.launch { activeTransport?.setAncMode(mode) }
     }
 
     fun setEqPreset(preset: EqPreset) {
-        scope.launch { transport?.setEqPreset(preset) }
+        scope.launch { activeTransport?.setEqPreset(preset) }
     }
 
     fun setInEarDetection(enabled: Boolean) {
-        scope.launch { transport?.setInEarDetection(enabled) }
+        scope.launch { activeTransport?.setInEarDetection(enabled) }
     }
 
     fun setLowLatency(enabled: Boolean) {
-        scope.launch { transport?.setLowLatency(enabled) }
+        scope.launch { activeTransport?.setLowLatency(enabled) }
     }
 
     fun setPersonalizedAnc(enabled: Boolean) {
-        scope.launch { transport?.setPersonalizedAnc(enabled) }
+        scope.launch { activeTransport?.setPersonalizedAnc(enabled) }
     }
 
     fun setBassEnhance(enabled: Boolean, level: Int) {
-        scope.launch { transport?.setBassEnhance(enabled, level) }
+        scope.launch { activeTransport?.setBassEnhance(enabled, level) }
     }
 
     fun ringBuds(ring: Boolean, isLeft: Boolean? = null) {
-        scope.launch { transport?.ringBuds(ring, isLeft) }
+        scope.launch { activeTransport?.ringBuds(ring, isLeft) }
     }
 
     fun launchEarFitTest() {
-        scope.launch { transport?.launchEarFitTest() }
+        scope.launch { activeTransport?.launchEarFitTest() }
     }
 }

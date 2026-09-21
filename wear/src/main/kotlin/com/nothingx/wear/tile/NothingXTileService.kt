@@ -107,8 +107,8 @@ class NothingXTileService : TileService() {
     private suspend fun currentState(): LastKnownDeviceState {
         val cached = prefs.lastKnownState.first()
         EarbudsConnectionHolder.init(applicationContext)
-        val live = EarbudsConnectionHolder.deviceState?.value
-        val connected = EarbudsConnectionHolder.connectionState?.value is ConnectionState.Connected
+        val live = EarbudsConnectionHolder.deviceState.value
+        val connected = EarbudsConnectionHolder.connectionState.value is ConnectionState.Connected
         return if (connected && live != null) {
             LastKnownDeviceState(
                 name = cached.name,

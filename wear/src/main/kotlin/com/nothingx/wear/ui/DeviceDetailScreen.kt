@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -24,10 +25,12 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
+import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.nothingx.bluetooth.ConnectionState
 import com.nothingx.protocol.AncMode
+import com.nothingx.wear.R
 import com.nothingx.wear.data.DeviceViewModel
 
 @Composable
@@ -54,6 +57,19 @@ fun DeviceDetailScreen(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_earbuds),
+                    contentDescription = null,
+                    tint = MaterialTheme.colors.primary,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .size(28.dp),
+                )
+            }
+        }
+
         item {
             Text(
                 text = deviceName,
