@@ -1,10 +1,10 @@
 # HANDOFF
 
-Last updated: 2026-09-21, compileSdk 37 landed + phone relay implemented.
-Pending: CI confirmation on commit `08fdc13` (in progress as of this
-update — check https://github.com/JObersi10/nothing-x-wearos/actions or
-PR https://github.com/JObersi10/nothing-x-wearos/pull/1 for current status
-before trusting anything below as "green").
+Last updated: 2026-09-21. **CI is green on HEAD (`e9c50ad`).** compileSdk 37
+and the phone relay are both confirmed to compile cleanly — protocol tests,
+bluetooth build, wear debug APK, and phone debug APK all passed. Nothing
+below is a "pending" caveat anymore for the build itself; on-device
+verification is still open (see test checklist).
 
 ## Where things stand right now
 
@@ -59,22 +59,20 @@ manual walk-through (see test checklist below).
 
 ## APK downloads
 
-As of the last confirmed-green run (commit `33e693c`, before compileSdk 37
-landed): https://github.com/JObersi10/nothing-x-wearos/actions/runs/35562509118
+**Confirmed-green run** (commit `e9c50ad`, compileSdk 37 + phone relay +
+docs, HEAD of the PR as of this writing):
+https://github.com/JObersi10/nothing-x-wearos/actions/runs/35563931415
 
-**A newer build should exist by the time this is read** — commit `08fdc13`
-(compileSdk 37 + phone relay together) was pushed and CI was in progress
-when this doc was last updated. Check
-https://github.com/JObersi10/nothing-x-wearos/actions/runs/35563341021
-(the phone-relay-only run, already confirmed green, includes the relay
-code but still at compileSdk 36) or look for the latest run on
-`claude/ecstatic-galileo-evyo4w` for the compileSdk-37 build.
+Direct artifact links (same run):
+- wear-debug-apk: https://github.com/JObersi10/nothing-x-wearos/actions/runs/35563931415/artifacts/10622789809
+- phone-debug-apk: https://github.com/JObersi10/nothing-x-wearos/actions/runs/35563931415/artifacts/10623830146
 
 GitHub artifact downloads need you logged into GitHub in the browser (the
-API zip URLs need an auth token) — open the run page and download from
-there. Artifacts expire ~90 days after the run. Install via
-`adb install -r wear-debug.apk` after unzipping (same for `phone-debug.apk`
-if testing the relay), or sideload however you normally do.
+API zip URLs need an auth token) — open the run page (or the links above)
+and download from there. Artifacts expire ~90 days after the run
+(2026-12-20). Install via `adb install -r wear-debug.apk` after unzipping
+(same for `phone-debug.apk` if testing the relay), or sideload however you
+normally do.
 
 ## What's done
 
@@ -155,23 +153,21 @@ connected, etc.) — worth capturing that log if something's wrong.
 
 ## Next steps, in order
 
-1. **Verify compileSdk 37 CI run is actually green** (commit `08fdc13`) —
-   check before doing anything else in this area.
-2. **Verify the phone relay on real hardware** (test checklist above) —
+1. **Verify the phone relay on real hardware** (test checklist above) —
    highest priority now that it's implemented; either confirm it works or
    find out where it breaks.
-3. **Build and retest the persistent-connection + in-tile-control
+2. **Build and retest the persistent-connection + in-tile-control
    architecture on device** — still unverified from a prior round.
-4. **Phase 2: implement the actual Wear Widget** —
+3. **Phase 2: implement the actual Wear Widget** —
    `GlanceWearWidgetService`/`GlanceWearWidget` + RemoteCompose, modeled on
    `android/wear-os-samples/WearWidget`. Now unblocked (compileSdk 37 is
    in). Not started.
-5. **Phase 3: Samsung Buds Controller APK review** for UX inspiration only
+4. **Phase 3: Samsung Buds Controller APK review** for UX inspiration only
    (path: `/root/.claude/uploads/5565ec22-aa0e-5699-a5e5-28bd8e488111/7e83f748-com.samsung.android.watch.budscontroller_1.0.08.47-100800047_minAPI30nodpi_apkmirror.com.apk`
    — not guaranteed to exist in a fresh session/container). Not started.
-6. Reconnect-on-boot / retry logic for `EarbudsConnectionService` if the
+5. Reconnect-on-boot / retry logic for `EarbudsConnectionService` if the
    earbuds go out of range while it's running in the background.
-7. Gesture *editing*, custom EQ, CMF's separate Listening Mode command —
+6. Gesture *editing*, custom EQ, CMF's separate Listening Mode command —
    see CLAUDE.md, still deferred from earlier passes.
 
 ## User's stated priorities (don't lose these across a compaction)

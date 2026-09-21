@@ -155,9 +155,9 @@ rather than guessing further. CI's `sdkmanager` step now installs
 `platforms;android-37.0` + `build-tools;37.0.0`; `compileSdk`/`targetSdk`
 are back to 37 in `bluetooth`/`wear`/`phone`, and `wear`'s `compose-bom`/
 `androidx.wear.compose.*` are back to `2026.09.00`/`1.6.2`. **Wear Widget
-implementation (Phase 2) is unblocked** — compileSdk 37 is confirmed
-resolvable in CI as of commit (see HANDOFF.md for the exact SHA). Not
-started yet.
+implementation (Phase 2) is unblocked** — compileSdk 37 is confirmed green
+in CI as of commit `e9c50ad` (full pipeline: protocol tests, bluetooth
+build, wear debug APK, phone debug APK all passed). Not started yet.
 
 ### Why `protocol`'s Kotlin JVM toolchain is 21, not 17
 
