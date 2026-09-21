@@ -160,6 +160,41 @@ compiler version is set via `composeOptions { kotlinCompilerExtensionVersion
 Kotlin ever gets bumped to 2.0+, switch to the plugin and drop
 `composeOptions` — don't run both.
 
+### Connection lifecycle lives at the device-session level, not per-screen
+
+Real bug, confirmed from the user's own logcat: an earlier version tied the
+RFCOMM connection's lifetime to `DeviceDetailScreen`'s own Compose
+lifecycle (`DisposableEffect { connect(); onDispose { disconnect() } }`).
+Navigating to Settings — a separate nav destination — disposed that
+composable and fired `onDispose`, tearing down the connection while the
+user was still in the middle of a device session. Every settings command
+after that silently logged "no output stream (not connected), dropped" —
+Find My Earbuds, Ear Tip Fit Test, and Low Lag Mode all looked individually
+broken but the actual cause was one line.
+
+Fixed by moving disconnect to the one place that's the real "left this
+device" signal: `DeviceListScreen`'s `LaunchedEffect(Unit)`, which only
+re-runs when the user is actually back at the list. `DeviceDetailScreen`
+now just ensures a connection exists (`LaunchedEffect`, no dispose-time
+teardown), and `DeviceViewModel.connect()` guards against restarting an
+already-live connection to the same address so re-entering the detail
+screen from Settings doesn't churn the socket. **Don't reintroduce a
+disconnect tied to a specific screen's composition** — any future screen
+added to the device-session nav graph (detail, settings, a future gestures
+editor, etc.) needs to NOT disconnect on its own dispose, only
+`DeviceListScreen` should.
+
+### Battery display is a letter badge, not an icon
+
+First attempt used hand-drawn `ic_bud.xml`/`ic_case.xml` vector pictograms
+that were never visually verified before shipping (this sandbox has no way
+to render a vector drawable) — they looked wrong on real hardware, per user
+feedback. Replaced with a circle + bold letter (L/C/R), which needs no
+custom art to render correctly. If earbud/case iconography comes back,
+actually check it renders acceptably (a screenshot from the user, or a
+local Compose preview) before shipping it, not just "the path data looks
+plausible."
+
 ### Tile is read-only, not live
 
 `NothingXTileService` reads cached state from `DevicePrefs` (written by
