@@ -63,6 +63,10 @@ private const val NOTIFICATION_ID = 2
  *    bonded device, same as [AutoRelayReceiver].
  *  - [MainActivity]'s manual Start/Stop buttons remain as an explicit
  *    override for either case.
+ *  - `CMD_QUERY_BONDED_DEVICES` from the watch (see [onMessageReceived])
+ *    answers with the phone's real bonded-device list over `DATA_BONDED_DEVICES`
+ *    so the watch can show an actual picker instead of relying on the blind
+ *    auto-pick above resolving correctly — see the wear-side `RelayDeviceListScreen`.
  */
 class PhoneRelayService : WearableListenerService() {
     private val scope = CoroutineScope(SupervisorJob())
@@ -86,6 +90,14 @@ class PhoneRelayService : WearableListenerService() {
     }
 
     override fun onMessageReceived(event: MessageEvent) {
+        if (event.path == RelayPaths.CMD_QUERY_BONDED_DEVICES) {
+            // Read-only lookup for the watch's device picker — deliberately
+            // doesn't call ensureForeground()/transportOrCreate(): just
+            // browsing the phone's bonded devices shouldn't spin up the
+            // persistent relay notification on its own.
+            pushBondedDevices()
+            return
+        }
         ensureForeground()
         val t = transportOrCreate()
         scope.launch {
@@ -122,6 +134,15 @@ class PhoneRelayService : WearableListenerService() {
 
     private fun firstMatchedBondedAddress(): String? =
         BondedDevices.list(this).firstOrNull { it.isSupported }?.address
+
+    private fun pushBondedDevices() {
+        val request = PutDataMapRequest.create(RelayPaths.DATA_BONDED_DEVICES).apply {
+            dataMap.putAll(RelayCodec.bondedDevicesToDataMap(BondedDevices.list(this@PhoneRelayService)))
+            dataMap.putLong("ts", System.currentTimeMillis())
+        }.asPutDataRequest().setUrgent()
+        Wearable.getDataClient(this).putDataItem(request)
+            .addOnFailureListener { e -> Log.w(TAG, "pushBondedDevices failed: ${e.message}") }
+    }
 
     private fun transportOrCreate(): EarbudsTransport {
         return transport ?: DirectRfcommTransport(this).also {

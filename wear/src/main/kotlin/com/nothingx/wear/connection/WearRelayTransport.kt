@@ -6,6 +6,7 @@ import com.google.android.gms.wearable.DataClient
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Wearable
+import com.nothingx.bluetooth.BondedDevice
 import com.nothingx.bluetooth.ConnectionState
 import com.nothingx.bluetooth.EarbudsTransport
 import com.nothingx.bluetooth.relay.RelayCodec
@@ -43,6 +44,10 @@ class WearRelayTransport(context: Context) : EarbudsTransport {
     private val _deviceState = MutableStateFlow(DeviceState())
     override val deviceState: StateFlow<DeviceState> = _deviceState.asStateFlow()
 
+    /** The phone's own bonded devices, as of the last [queryBondedDevices] response. */
+    private val _bondedDevices = MutableStateFlow<List<BondedDevice>>(emptyList())
+    val bondedDevices: StateFlow<List<BondedDevice>> = _bondedDevices.asStateFlow()
+
     private val dataListener = DataClient.OnDataChangedListener { events ->
         for (event in events) {
             if (event.type != DataEvent.TYPE_CHANGED) continue
@@ -50,6 +55,7 @@ class WearRelayTransport(context: Context) : EarbudsTransport {
             when (event.dataItem.uri.path) {
                 RelayPaths.DATA_DEVICE_STATE -> _deviceState.value = RelayCodec.deviceStateFromDataMap(map)
                 RelayPaths.DATA_CONNECTION_STATE -> _connectionState.value = RelayCodec.connectionStateFromDataMap(map)
+                RelayPaths.DATA_BONDED_DEVICES -> _bondedDevices.value = RelayCodec.bondedDevicesFromDataMap(map)
             }
         }
         events.release()
@@ -82,6 +88,11 @@ class WearRelayTransport(context: Context) : EarbudsTransport {
     override suspend fun connect(address: String) {
         Log.i(TAG, "connect($address) via phone relay")
         send(RelayPaths.CMD_CONNECT, RelayCodec.encodeConnect(address))
+    }
+
+    /** Asks the phone for its bonded-device list; response lands in [bondedDevices]. */
+    fun queryBondedDevices() {
+        send(RelayPaths.CMD_QUERY_BONDED_DEVICES)
     }
 
     override suspend fun disconnect() {

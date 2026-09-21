@@ -1,6 +1,7 @@
 package com.nothingx.wear.connection
 
 import android.content.Context
+import com.nothingx.bluetooth.BondedDevice
 import com.nothingx.bluetooth.ConnectionState
 import com.nothingx.bluetooth.DirectRfcommTransport
 import com.nothingx.bluetooth.EarbudsTransport
@@ -44,8 +45,23 @@ import kotlinx.coroutines.launch
  * flow identity itself.
  */
 object EarbudsConnectionHolder {
-    /** Sentinel "address" for the phone relay entry in the device list — see DeviceListScreen. */
+    /**
+     * Sentinel "address" for the phone relay entry in the device list — see
+     * DeviceListScreen. Tapping it navigates to `RelayDeviceListScreen`
+     * rather than connecting directly (MainActivity intercepts it before
+     * calling [connect]); it's never passed to [connect] itself anymore.
+     */
     const val RELAY_TARGET_ADDRESS = "relay"
+
+    /**
+     * Prefix for a relay address that names a specific phone-bonded device,
+     * e.g. `"relay:AA:BB:CC:DD:EE:FF"` — what `RelayDeviceListScreen` passes
+     * to [connect] once the user picks a device from the phone's own bonded
+     * list (queried via [queryRelayBondedDevices]), instead of the old blind
+     * "just pick whatever's matched" auto-connect, which wasn't resolving
+     * reliably and forced opening the phone app to pick manually there.
+     */
+    const val RELAY_ADDRESS_PREFIX = "relay:"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var appContext: Context? = null
@@ -115,14 +131,17 @@ object EarbudsConnectionHolder {
         reconnectAttempts = 0
         val ctx = appContext ?: return
         init(ctx)
-        if (address == RELAY_TARGET_ADDRESS) {
+        if (address == RELAY_TARGET_ADDRESS || address.startsWith(RELAY_ADDRESS_PREFIX)) {
             val t = relayTransport()
             activate(t)
-            // Blank address = "whatever matched device is already paired to the
-            // phone" — the phone side now auto-detects it, so the watch doesn't
-            // need to know or carry a real target address at all. See
-            // PhoneRelayService's handling of a blank CMD_CONNECT payload.
-            scope.launch { t.connect("") }
+            // A bare RELAY_TARGET_ADDRESS (blank phone-side address) means
+            // "whatever matched device is already paired to the phone" — kept
+            // as a fallback for callers that still pass it (e.g. resuming a
+            // last-connected device saved before this prefix existed), but
+            // the watch UI no longer connects this way directly; see
+            // RELAY_ADDRESS_PREFIX's doc comment.
+            val phoneAddress = address.removePrefix(RELAY_ADDRESS_PREFIX).let { if (it == RELAY_TARGET_ADDRESS) "" else it }
+            scope.launch { t.connect(phoneAddress) }
         } else {
             val t = directTransport()
             activate(t)
@@ -130,6 +149,17 @@ object EarbudsConnectionHolder {
             observeForReconnect(t, address)
         }
     }
+
+    /** Triggers a fresh phone bonded-device lookup; results land in [relayBondedDevices]. */
+    fun queryRelayBondedDevices() {
+        val ctx = appContext ?: return
+        init(ctx)
+        relayTransport().queryBondedDevices()
+    }
+
+    /** The phone's own bonded devices, as of the last [queryRelayBondedDevices] response. */
+    val relayBondedDevices: StateFlow<List<BondedDevice>>
+        get() = relayTransport().bondedDevices
 
     private fun observeForReconnect(transport: DirectRfcommTransport, address: String) {
         reconnectJob?.cancel()

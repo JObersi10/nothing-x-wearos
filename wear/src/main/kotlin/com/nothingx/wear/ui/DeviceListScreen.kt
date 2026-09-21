@@ -27,7 +27,13 @@ import com.nothingx.wear.R
 import com.nothingx.wear.connection.EarbudsConnectionHolder
 import com.nothingx.wear.data.DeviceViewModel
 
-/** Always-visible entry for the phone relay path — see EarbudsConnectionHolder's doc comment. */
+/**
+ * Always-visible entry for the phone relay path — see EarbudsConnectionHolder's
+ * doc comment. Tapping this doesn't connect directly: MainActivity's nav
+ * graph intercepts a tap on [EarbudsConnectionHolder.RELAY_TARGET_ADDRESS]
+ * and routes to `RelayDeviceListScreen` instead, so the user picks a real
+ * phone-bonded device rather than relying on blind auto-pick.
+ */
 private val RELAY_DEVICE = BondedDevice(
     name = "Buds (phone)",
     address = EarbudsConnectionHolder.RELAY_TARGET_ADDRESS,
@@ -97,8 +103,9 @@ fun DeviceListScreen(viewModel: DeviceViewModel, onDeviceSelected: (BondedDevice
     }
 }
 
+/** Also used by RelayDeviceListScreen for the phone's own bonded-device picker. */
 @Composable
-private fun DeviceChip(device: BondedDevice, onClick: () -> Unit) {
+internal fun DeviceChip(device: BondedDevice, onClick: () -> Unit) {
     Chip(
         onClick = onClick,
         icon = {

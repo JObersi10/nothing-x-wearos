@@ -16,10 +16,12 @@ import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.nothingx.bluetooth.ConnectionState
+import com.nothingx.wear.connection.EarbudsConnectionHolder
 import com.nothingx.wear.data.DeviceViewModel
 import com.nothingx.wear.ui.DeviceDetailScreen
 import com.nothingx.wear.ui.DeviceListScreen
 import com.nothingx.wear.ui.PermissionGate
+import com.nothingx.wear.ui.RelayDeviceListScreen
 import com.nothingx.wear.ui.SettingsScreen
 import com.nothingx.wear.ui.theme.NothingXTheme
 
@@ -70,8 +72,18 @@ private fun NothingXApp(viewModel: DeviceViewModel) {
         SwipeDismissableNavHost(navController = navController, startDestination = "list") {
             composable("list") {
                 DeviceListScreen(viewModel) { device ->
+                    if (device.address == EarbudsConnectionHolder.RELAY_TARGET_ADDRESS) {
+                        navController.navigate("relayPicker")
+                    } else {
+                        Toast.makeText(context, "Connecting to ${device.name}…", Toast.LENGTH_SHORT).show()
+                        viewModel.connect(device.address, device.name)
+                    }
+                }
+            }
+            composable("relayPicker") {
+                RelayDeviceListScreen(viewModel) { device ->
                     Toast.makeText(context, "Connecting to ${device.name}…", Toast.LENGTH_SHORT).show()
-                    viewModel.connect(device.address, device.name)
+                    viewModel.connect(EarbudsConnectionHolder.RELAY_ADDRESS_PREFIX + device.address, device.name)
                 }
             }
             composable("detail/{address}/{name}") { backStackEntry ->

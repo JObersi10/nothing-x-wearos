@@ -1,6 +1,7 @@
 package com.nothingx.bluetooth.relay
 
 import com.google.android.gms.wearable.DataMap
+import com.nothingx.bluetooth.BondedDevice
 import com.nothingx.bluetooth.ConnectionState
 import com.nothingx.protocol.AncMode
 import com.nothingx.protocol.DeviceState
@@ -36,9 +37,11 @@ object RelayPaths {
     const val CMD_SET_BASS_ENHANCE = "/nothingx/cmd/setBassEnhance"
     const val CMD_RING_BUDS = "/nothingx/cmd/ringBuds"
     const val CMD_LAUNCH_EAR_FIT_TEST = "/nothingx/cmd/launchEarFitTest"
+    const val CMD_QUERY_BONDED_DEVICES = "/nothingx/cmd/queryBondedDevices"
 
     const val DATA_DEVICE_STATE = "/nothingx/state/device"
     const val DATA_CONNECTION_STATE = "/nothingx/state/connection"
+    const val DATA_BONDED_DEVICES = "/nothingx/state/bondedDevices"
 }
 
 object RelayCodec {
@@ -158,4 +161,35 @@ object RelayCodec {
         "Failed" -> ConnectionState.Failed(map.getString("reason") ?: "Unknown")
         else -> ConnectionState.Idle
     }
+
+    // ---- bonded devices (DataMap, phone -> watch) ----
+    // Lets the watch show a real picker over whatever's bonded to the phone
+    // instead of blindly auto-picking one — see PhoneRelayService's handling
+    // of CMD_QUERY_BONDED_DEVICES.
+
+    fun bondedDevicesToDataMap(devices: List<BondedDevice>): DataMap = DataMap().apply {
+        putDataMapArrayList(
+            "devices",
+            ArrayList(
+                devices.map { device ->
+                    DataMap().apply {
+                        putString("name", device.name)
+                        putString("address", device.address)
+                        putBoolean("isSupported", device.isSupported)
+                        putBoolean("isUnverified", device.isUnverified)
+                    }
+                },
+            ),
+        )
+    }
+
+    fun bondedDevicesFromDataMap(map: DataMap): List<BondedDevice> =
+        map.getDataMapArrayList("devices").orEmpty().map { device ->
+            BondedDevice(
+                name = device.getString("name") ?: device.getString("address").orEmpty(),
+                address = device.getString("address").orEmpty(),
+                isSupported = device.getBoolean("isSupported", false),
+                isUnverified = device.getBoolean("isUnverified", false),
+            )
+        }
 }

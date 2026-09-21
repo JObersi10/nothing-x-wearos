@@ -477,6 +477,52 @@ None of this round has touched real hardware yet — it's a direct response
 to a hardware bug report, but the fixes themselves are unverified until the
 next round confirms them.
 
+### Phone relay device picker (2026-09-22)
+
+Second hardware feedback round on the rewritten relay: the "blank address =
+auto-pick whatever's matched" design (see the relay-rewrite entry above)
+wasn't resolving reliably in practice — the user had to open the phone app
+and manually tap a device there anyway, which is exactly the friction the
+rewrite was meant to remove. Root cause not confirmed (no fresh logcat
+captured `NothingX`/`NothingXRelay` tag output — see the logging note
+below), most likely `firstMatchedBondedAddress()`'s `NothingDeviceMatcher`
+name-match not hitting on this hardware, or more than one bonded device
+qualifying and the wrong one winning.
+
+Rather than debug the auto-pick blind, added an actual picker: a new relay
+message pair, `CMD_QUERY_BONDED_DEVICES` (watch → phone, `MessageClient`)
+and `DATA_BONDED_DEVICES` (phone → watch, `DataClient`), lets the watch ask
+`PhoneRelayService` for its real bonded-device list and show it directly —
+same pattern as the existing device-state/connection-state push, see
+`RelayProtocol.kt`. Tapping "Buds (phone)" in `DeviceListScreen` now
+navigates to a new `RelayDeviceListScreen` (wear/ui) instead of connecting
+blind; picking a device there connects via a new address form,
+`"relay:<phone-bonded-MAC>"` (`EarbudsConnectionHolder.RELAY_ADDRESS_PREFIX`),
+which `EarbudsConnectionHolder.connect()` unwraps to the real MAC before
+handing it to `WearRelayTransport`. The old bare `RELAY_TARGET_ADDRESS`
+blank-auto-pick path still works in `connect()` (kept as a fallback for
+anything that still passes it, e.g. a `lastDeviceAddress` saved before this
+existed) but nothing in the UI calls it directly anymore.
+
+Query responses aren't filtered to `isSupported` matches only — the picker
+shows every bonded device the phone reports, same as `DeviceListScreen`'s
+"show all" fallback, so a device whose name doesn't match
+`NothingDeviceMatcher`'s pattern is still pickable rather than silently
+hidden the same way the blind auto-pick was silently failing.
+
+**Unverified** — built in response to a description of the bug, not a fresh
+capture of it; the actual auto-pick failure mode (matcher miss vs. wrong
+device among several matches) is still unconfirmed since the log handed
+over for this round turned out to be an unfiltered `logcat` that cut off at
+the app's first permission-grant dialog, before any of this was exercised
+(see "Raw frame debug logging" below — the fix there, filtering to the
+`NothingX`/`NothingXRelay` tags, is exactly what the next capture needs).
+Needs a real round: does `CMD_QUERY_BONDED_DEVICES` actually reach
+`PhoneRelayService` and get answered (it deliberately skips
+`ensureForeground()`/starting the transport — verify that doesn't get
+silently dropped by Play Services for some other reason), does the picker
+list show up with the right devices, does picking one actually connect.
+
 ## Icons and branding
 
 `wear/src/main/res/drawable/ic_anc_*.xml`, `ic_arrow_right.xml`, `ic_back.xml`

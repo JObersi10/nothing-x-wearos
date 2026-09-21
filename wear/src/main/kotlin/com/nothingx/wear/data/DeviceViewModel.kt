@@ -68,6 +68,12 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         _bondedDevices.value = BondedDevices.list(getApplication())
     }
 
+    /** The phone's own bonded devices, for the phone-relay picker — see RelayDeviceListScreen. */
+    val relayBondedDevices: StateFlow<List<BondedDevice>>
+        get() = EarbudsConnectionHolder.relayBondedDevices
+
+    fun queryRelayBondedDevices() = EarbudsConnectionHolder.queryRelayBondedDevices()
+
     fun connect(address: String, name: String) {
         _pendingDevice.value = BondedDevice(name = name, address = address, isSupported = true, isUnverified = false)
         EarbudsConnectionService.start(getApplication(), address)
