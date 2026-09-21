@@ -15,6 +15,24 @@ android {
         versionName = "0.1.0"
     }
 
+    // Fixed debug signing key committed at the repo root (debug.keystore — not
+    // secret, standard "android"/"android" debug password). Without this,
+    // Gradle falls back to each machine/CI run's own auto-generated
+    // ~/.android/debug.keystore, so every fresh CI build (or a build from a
+    // different machine) signs with a different key. Android then refuses
+    // `adb install` over an already-installed app with
+    // INSTALL_FAILED_UPDATE_INCOMPATIBLE — confirmed hitting this installing
+    // a CI-built APK over a locally-built one. Pinning the key here means
+    // every build, from any machine or CI run, signs identically.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildFeatures {
         compose = true
     }
